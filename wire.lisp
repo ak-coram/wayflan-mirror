@@ -2,7 +2,8 @@
 
 (defpackage #:xyz.shunter.wayhack.wire
   (:use #:cl)
-  (:local-nicknames (#:io #:fast-io))
+  (:local-nicknames (#:io #:fast-io)
+                    (#:a #:alexandria))
   (:export #:wl-int
            #:wl-uint
 
@@ -11,12 +12,16 @@
            #:read-wl-fixed
            #:read-wl-string
            #:read-wl-array
+           #:read-wl-message
+           #:with-input-from-message
 
            #:write-wl-int
            #:write-wl-uint
            #:write-wl-fixed
            #:write-wl-string
-           #:write-wl-array)
+           #:write-wl-array
+           #:write-wl-message
+           #:with-output-as-message)
   (:documentation "Wayland primitive data communication.
 
 Wayland is a protocol for a compositor to talk to its clients.
@@ -116,7 +121,7 @@ The wayland-wire package defines utilities for communicating primitive data thro
   ;;
   ;; The order of the message size is host-endianness-dependent, so read
   ;; the whole 32-bit uint and bit-shift the original numbers out.
-  (let* ((object-id (read-wl-uint buffer))
+  (let* ((sender-id (read-wl-uint buffer))
          (length-and-opcode (read-wl-uint buffer))
          (message-length (ash length-and-opcode -16))
          (opcode (logand length-and-opcode (1- (ash 1 16))))
@@ -125,9 +130,19 @@ The wayland-wire package defines utilities for communicating primitive data thro
     (assert (= (io:fast-read-sequence body buffer)
                body-length))
     (values
-      object-id
+      sender-id
       opcode
       body)))
+
+(defmacro with-input-from-message ((buffer sender-id opcode
+                                           vector &optional stream (offset 0))
+                                   &body body)
+  (a:with-gensyms (msg-body)
+    `(multiple-value-bind (,sender-id ,opcode ,msg-body)
+           (io:with-fast-input (buffer ,vector ,stream ,offset)
+             (read-wl-message buffer))
+       (io:with-fast-input (,buffer ,msg-body)
+         ,@body))))
 
 
 
@@ -177,14 +192,21 @@ The wayland-wire package defines utilities for communicating primitive data thro
       (io:writeu8 0 buffer)))
   (values))
 
-(defun write-wl-message (object-id opcode body buffer)
+(defun write-wl-message (sender-id opcode body buffer)
   "Write a message including an octet vector body to a Wayland fast-io buffer."
-  (check-type object-id (unsigned-byte 32))
+  (check-type sender-id (unsigned-byte 32))
   (check-type opcode (unsigned-byte 16))
   (let* ((message-length (+ (length body) +header-length+))
          (length-and-opcode (logior (ash message-length 16)
                                     opcode)))
-    (write-wl-uint object-id buffer)
+    (write-wl-uint sender-id buffer)
     (write-wl-uint length-and-opcode buffer)
-    (assert (= (io:fast-write-sequence body buffer)
-               (length body)))))
+    (io:fast-write-sequence body buffer)))
+
+(defmacro with-output-as-message ((buffer sender-id opcode &optional output)
+                                  &body body)
+  (a:once-only (output)
+    `(let ((body (io:with-fast-output (,buffer) ,@body)))
+       (io:with-fast-output (buffer ,output)
+         (write-wl-message ,sender-id ,opcode body buffer))
+       (force-output ,output))))

@@ -7,4 +7,5 @@
                #:iolib
                #:posix-shm
                #:trivial-features)
-  :components ((:file #:wire)))
+  :components ((:file #:wire)
+               (:file #:client)))
