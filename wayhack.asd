@@ -3,7 +3,8 @@
   :author "Samuel Hunter"
   :license "Proprietary"
 
-  :depends-on (#:fast-io
+  :depends-on (#:alexandria
+               #:fast-io
                #:iolib
                #:posix-shm
                #:trivial-features)
