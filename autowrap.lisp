@@ -3,9 +3,9 @@
   (:local-nicknames (#:a #:alexandria)
                     (#:dom #:org.shirakumo.plump.dom))
   (:import-from #:xyz.shunter.wayhack.client
-                #:define-interface
-                #:define-request
-                #:define-event
+                #:define-interface-class
+                #:define-request-function
+                #:define-event-handler
                 #:define-enum
                 #:wl-display)
   (:export #:wl-include))
@@ -80,7 +80,12 @@
 (defun description (elm)
   (string-trim
     #(#\Newline #\Space #\Tab)
-    (plump-dom:text (child-of-tag "description" elm))))
+    (dom:text (child-of-tag "description" elm))))
+
+(defun summary* (elm)
+  "Return the summary of an element whose summary is stored in a child description element."
+  (a:when-let ((description (child-of-tag "description" elm)))
+    (dom:attribute description "summary")))
 
 (defun parse-value (string)
   (if (and (< 1 (length string))
@@ -106,6 +111,30 @@
              char))
        (string-upcase string)))
 
+(defun hyphenize (&rest strings)
+  (format nil "~{~A~^-~}" (mapcar #'lispify strings)))
+
+(defun interface-name (dom-interface)
+  (intern (hyphenize (name dom-interface))))
+
+(defun interface-event-name (dom-interface)
+  (intern (hyphenize (name dom-interface)
+                     '#:event)))
+
+(defun request-name (interface-name dom-request)
+  (intern (hyphenize interface-name (name dom-request))))
+
+(defun event-name (interface-name dom-event)
+  (intern (hyphenize interface-name
+                     (name dom-event)
+                     '#:event)))
+
+(defun enum-name (dom-enum)
+  (make-symbol (hyphenize (name dom-enum))))
+
+(defun arg-name (dom-arg)
+  (intern (hyphenize '#:wl-event (name dom-arg))))
+
 (defun arg-type (dom-arg)
   "Return the lispified type of the DOM arg element."
   ;; TODO intern the interface/enum types into symbols
@@ -126,51 +155,57 @@
     ("fd" :fd)))
 
 (defun transform-arg (dom-arg)
-  (list (intern (lispify (name dom-arg)))
+  (list* (arg-name dom-arg)
+        :initarg (a:make-keyword (lispify (name dom-arg)))
         :type (arg-type dom-arg)
-        :documentation (summary dom-arg)))
+        (a:when-let ((summary (summary* dom-arg)))
+          (list :documentation summary))))
 
 (defun transform-request (dom-request interface opcode)
-  `(define-request
-     ,(list interface (make-symbol (lispify (name dom-request))) opcode)
+  `(define-request-function
+     ,(list (request-name interface dom-request) interface opcode)
      ,(map 'list #'transform-arg (args dom-request))
-     ; (:documentation (description dom-request))
+     ,@(a:when-let ((summary (summary* dom-request)))
+         `((:documentation ,summary)))
      ,@(a:when-let ((type (dom:attribute dom-request "type")))
-               `((:type (a:make-keyword (string-upcase type)))))))
+         `((:type (a:make-keyword (string-upcase type)))))))
 
-(defun transform-event (dom-event interface opcode)
-  `(define-event
-     ,(list interface (make-symbol (lispify (name dom-event))) opcode)
+(defun transform-event (dom-event interface-event interface opcode)
+  `(define-event-handler (,(event-name interface dom-event) ,interface ,opcode)
      ,(map 'list #'transform-arg (args dom-event))
-     ; (:documentation (description dom-event))
-     ))
+     (:event-superclasses ,interface-event)
+     ,@(a:when-let ((summary (summary* dom-event)))
+         `((:documentation ,summary)))))
 
 (defun transform-enum (dom-enum interface)
-  `(define-enum
-     ,(list interface (make-symbol (lispify (name dom-enum))))
+  `(define-enum ,(enum-name dom-enum) ()
      ,(map 'list
             (lambda (dom-entry)
               (list (a:make-keyword (lispify (name dom-entry)))
                     (value dom-entry)
                     :documentation (summary dom-entry)))
             (entries dom-enum))
-     ; (:documentation (description dom-enum))
+     ,@(a:when-let ((summary (summary* dom-enum)))
+         `((:documentation ,summary)))
      ,@(when (string= "true" (bitfield dom-enum))
               `((:bitfield t)))))
 
 (defun transform-interface (dom-interface)
-  (let ((name (intern (lispify (name dom-interface))))
+  (let ((name (interface-name dom-interface))
+        (event-name (interface-event-name dom-interface))
         (requests (requests dom-interface))
         (events (events dom-interface))
         (enums (enums dom-interface)))
     `(progn
-       (define-interface ,name ()
-         (:name ,(name dom-interface))
-         ;(:documentation ,(description dom-interface))
-
+       (define-interface-class ,name ()
          ;; wl_display is specially defined, so don't stub this out.
          ,@(when (string= (name dom-interface) "wl_display")
-             `((:skip-defclass t))))
+             `((:skip-defclass t)))
+         (:event-class ,event-name)
+
+         (:interface-name ,(name dom-interface))
+         ,@(a:when-let ((summary (summary* dom-interface)))
+             `((:documentation ,summary))))
 
        ,@(map 'list
               (lambda (dom-enum)
@@ -186,7 +221,7 @@
        ,@(let ((opcode -1))
            (map 'list
                 (lambda (dom-event)
-                  (transform-event dom-event name (incf opcode)))
+                  (transform-event dom-event event-name name (incf opcode)))
                 events)))))
 
 (defun transform-protocol (dom-protocol)

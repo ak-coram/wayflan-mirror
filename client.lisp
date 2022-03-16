@@ -24,9 +24,9 @@
            #:wl-display-listen
            #:wl-display-dispatch-event
 
-           #:define-interface
-           #:define-request
-           #:define-event
+           #:define-interface-class
+           #:define-request-function
+           #:define-event-handler
            #:define-enum))
 
 (in-package #:xyz.shunter.wayhack.client)
@@ -193,11 +193,6 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
 
 ;; Wl protocol macros
 
-(eval-when (:load-toplevel :compile-toplevel :execute)
-  ;; Macro helpers
-  (defun hyphenize (&rest strings)
-    (format nil "~{~A~^-~}" (mapcar #'string strings))))
-
 (defmacro specifier-bind (lambda-list specifier &body body)
   "Bind the given LAMBDA-LIST to SPECIFIER, which is transformed to a list of itself if it's not already a list."
   (a:once-only (specifier)
@@ -205,6 +200,15 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
                                           ,specifier
                                           (list ,specifier))
        ,@body)))
+
+(defmacro option-bind ((&rest option-names) options &body body)
+  (a:once-only (options)
+    (let ((binding-forms
+            (mapcar (lambda (option-name)
+                      `(cdr (assoc ,(a:make-keyword option-name) ,options)))
+                    option-names)))
+      `(let ,(mapcar #'list option-names binding-forms)
+         ,@body))))
 
 (defmacro wltype-case (keyform &body cases)
   "Evaluate the clause selected by the matching wayland type."
@@ -275,94 +279,115 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
             (display-socket (wl-proxy-display ,sender))
             ,obj))))
 
-(defmacro define-interface (name () &body options)
+(defmacro define-interface-class (name () &body options)
   "Define a wl-proxy CLOS subclass an associated wl-event CLOS subclass, and assign the interface's name to the interface table, accessible via #'FIND-INTERFACE-NAMED."
-  (let ((event-name (intern (hyphenize name '#:event))))
+  (option-bind (documentation event-class skip-defclass interface-name) options
     `(progn
-       ;; wl-proxy class. The :skip-defclass option is given specifically for
-       ;; wl-display.
-       ,(unless (cadr (assoc :skip-defclass options))
-          `(defclass ,name (wl-proxy) ()))
+       ;; wl-proxy class
+       ,@(unless (first skip-defclass)
+          `((defclass ,name (wl-proxy) ()
+              (:documentation ,@documentation))))
+
        ;; wl-event class
-       (defclass ,event-name (wl-event) ()
-         (:documentation ,(format nil "Event sent from a ~A object."
-                                  (symbol-name name))))
+       ,@(when event-class
+           `((defclass ,(first event-class) (wl-event) ()
+               (:documentation ,(format nil "Event sent from a ~A proxy."
+                                        name)))))
+
        ;; Associate wl-proxy class w/ interface name
-       ,(when (assoc :name options)
-          `(setf (gethash ,(cadr (assoc :name options))
-                          *interface-table*)
-                 (find-class ',name))))))
+       ,@(when interface-name
+           `((setf (gethash ,(first interface-name) *interface-table*)
+                  (find-class ',name))))
 
-(defmacro define-enum ((interface name) &body (entry-specifiers &rest options))
+       ',name)))
+
+(defmacro define-enum (name () &body (entry-specifiers &rest options))
   "Define a parameter that associates each entry keyword with an index in the array."
-  (declare (ignore interface name entry-specifiers options)))
+  (declare (ignore name entry-specifiers options)))
 
-(defmacro define-request ((interface name opcode) &body (arg-specifiers &rest options))
+(defmacro define-request-function ((name interface opcode) &body (arg-specifiers &rest options))
   "Define a function implementing the wl request.
 
 DEFINE-REQUEST currently only supports up to one :NEW-ID argument per request."
-  (declare (ignore options))
-  (let ((full-name (intern (hyphenize interface name)))
-        (new-proxy-interface
-          (dolist (specifier arg-specifiers)
-            (let ((type (getf (rest specifier) :type)))
-              (wltype-case type
-                ((:new-id &optional interface)
-                 (return (if interface `',interface 'interface)))))))
-        (lisp-args
-          (mapcan (lambda (specifier)
-                    (specifier-bind (name &key type &allow-other-keys) specifier
-                      (wltype-case type
-                        ((:new-id &optional interface)
-                         (if interface () (list 'interface)))
-                        (t (list name)))))
-                  arg-specifiers))
-        (output-form
-          `(wire:with-output-as-message (buffer (wl-proxy-id proxy)
-                                                ,opcode
-                                                (display-socket (wl-proxy-display proxy)))
-             ,@(mapcar (lambda (specifier)
+  (option-bind (documentation) options
+    (a:with-gensyms (proxy buffer new-proxy)
+      (let* ((new-proxy-interface
+               ;; If a new proxy is being created, in this request, the form to
+               ;; evaluate to the proxy's interface. If the type is fixed, it's
+               ;; that type, quoted. Otherwise, it's the interface's name given in
+               ;; the lambda list.
+               (dolist (specifier arg-specifiers)
+                 (let ((type (getf (rest specifier) :type)))
+                   (wltype-case type
+                     ((:new-id &optional type-interface)
+                      (return (if type-interface
+                                  `(quote ,type-interface)
+                                  (gensym "INTERFACE"))))))))
+             (lambda-list-tail
+               (mapcan (lambda (specifier)
                          (specifier-bind (name &key type &allow-other-keys) specifier
-                           `(write-arg ,(wltype-case type
-                                          (:new-id 'new-proxy)
-                                          (t name))
-                                       ,type
-                                       proxy
-                                       buffer)))
-                       arg-specifiers))))
-    `(defun ,full-name (proxy ,@lisp-args)
-       ,(if new-proxy-interface
-            `(let ((new-proxy (make-proxy ,new-proxy-interface (wl-proxy-display proxy))))
-               ,output-form
-               new-proxy)
-            output-form))))
+                           (wltype-case type
+                             ((:new-id &optional type-interface)
+                              (unless type-interface
+                                (list new-proxy-interface)))
+                             (t (list name)))))
+                       arg-specifiers))
+             (output-form
+               `(wire:with-output-as-message (,buffer (wl-proxy-id ,proxy)
+                                                      ,opcode
+                                                      (display-socket (wl-proxy-display ,proxy)))
+                  ,@(mapcar (lambda (specifier)
+                              (specifier-bind (name &key type &allow-other-keys) specifier
+                                `(write-arg ,(wltype-case type
+                                               (:new-id new-proxy)
+                                               (t name))
+                                            ,type
+                                            ,proxy
+                                            ,buffer)))
+                            arg-specifiers))))
+        `(defun ,name ,(list* proxy lambda-list-tail)
+           ,@documentation
+           (check-type ,proxy ,interface)
+           ,(if new-proxy-interface
+                `(let ((,new-proxy (make-proxy ,new-proxy-interface (wl-proxy-display ,proxy))))
+                   ,output-form
+                   ,new-proxy)
+                output-form))))))
 
-(defmacro define-event ((interface name opcode) &body (arg-specifiers))
+(defmacro define-event-handler ((name interface opcode) &body (arg-specifiers &rest options))
   "Define a wl-event class and a READ-EVENT method to support WL-DISPLAY-DISPATCH-EVENT."
-  (let ((full-name (intern (hyphenize interface name '#:event)))
-        (parent-name (intern (hyphenize interface '#:event)))
-        (slot-specifiers
-          (mapcar (lambda (arg-specifier)
-                    (specifier-bind (name &key &allow-other-keys) arg-specifier
-                      (let ((initarg (a:make-keyword name))
-                            (reader (intern (hyphenize '#:wl-event name))))
-                        `(,name :initarg ,initarg
-                                :reader ,reader))))
-                  arg-specifiers)))
-    `(progn
-       ;; Event class
-       (defclass ,full-name (,parent-name)
-         ,slot-specifiers)
-       ;; Event reader
-       (defmethod read-event ((proxy ,interface) (opcode (eql ,opcode)) buffer)
-         (make-instance
-           ',full-name
-           ,@(mapcan
-               (lambda (arg-specifier)
-                 (specifier-bind (name &key type &allow-other-keys) arg-specifier
-                   (list (a:make-keyword name)
-                         `(read-arg ,type proxy buffer))))
-               arg-specifiers))))))
+  (option-bind (documentation event-superclasses) options
+    (a:with-gensyms (proxy opcode-sym buffer)
+      (let ((slot-specifiers
+              (mapcar (lambda (arg-specifier)
+                        (specifier-bind (arg-name &key initarg documentation &allow-other-keys)
+                                        arg-specifier
+                          `(,arg-name :reader ,arg-name
+                                  :initarg ,initarg
+                                  ,@(when documentation
+                                      `(:documentation ,@documentation)))))
+                      arg-specifiers))
+            (initargs
+              (mapcan
+                (lambda (arg-specifier)
+                  (specifier-bind (arg-name &key initarg type &allow-other-keys)
+                                  arg-specifier
+                    (declare (ignore arg-name))
+                    (list initarg
+                          `(read-arg ,type ,proxy ,buffer))))
+                arg-specifiers)))
+        `(progn
+           ;; Event class
+           (defclass ,name ,(or event-superclasses '(wl-event))
+             ,slot-specifiers
+             ,@(when documentation
+                 `((:documentation ,@documentation))))
+           ;; Event reader
+           (defmethod read-event ((,proxy ,interface)
+                                  (,opcode-sym (eql ,opcode))
+                                  ,buffer)
+             ,@documentation
+             (make-instance ',name ,@initargs)))))))
 
 ;; Stub out some classes
 (defclass wl-callback-done-event (wl-event) ())
