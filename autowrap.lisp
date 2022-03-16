@@ -129,8 +129,8 @@
                      (name dom-event)
                      '#:event)))
 
-(defun enum-name (dom-enum)
-  (make-symbol (hyphenize (name dom-enum))))
+(defun enum-name (interface-name dom-enum)
+  (make-symbol (hyphenize interface-name (name dom-enum))))
 
 (defun arg-name (dom-arg)
   (intern (hyphenize '#:wl-event (name dom-arg))))
@@ -154,80 +154,100 @@
     ("array" :array)
     ("fd" :fd)))
 
-(defun transform-arg (dom-arg)
-  (list* (arg-name dom-arg)
-        :initarg (a:make-keyword (lispify (name dom-arg)))
-        :type (arg-type dom-arg)
-        (a:when-let ((summary (summary* dom-arg)))
-          (list :documentation summary))))
+(defun transform-arg (dom-arg syms)
+  (let ((name (arg-name dom-arg)))
+    (pushnew name (car syms))
+    (list* name
+           :initarg (a:make-keyword (lispify (name dom-arg)))
+           :type (arg-type dom-arg)
+           (a:when-let ((summary (summary* dom-arg)))
+             (list :documentation summary)))))
 
-(defun transform-request (dom-request interface opcode)
-  `(define-request-function
-     ,(list (request-name interface dom-request) interface opcode)
-     ,(map 'list #'transform-arg (args dom-request))
-     ,@(a:when-let ((summary (summary* dom-request)))
-         `((:documentation ,summary)))
-     ,@(a:when-let ((type (dom:attribute dom-request "type")))
-         `((:type (a:make-keyword (string-upcase type)))))))
+(defun transform-request (dom-request interface opcode syms)
+  (let ((name (request-name interface dom-request)))
+    (pushnew name (car syms))
 
-(defun transform-event (dom-event interface-event interface opcode)
-  `(define-event-handler (,(event-name interface dom-event) ,interface ,opcode)
-     ,(map 'list #'transform-arg (args dom-event))
-     (:event-superclasses ,interface-event)
-     ,@(a:when-let ((summary (summary* dom-event)))
-         `((:documentation ,summary)))))
+    `(define-request-function
+       ,(list name interface opcode)
+       ,(map 'list (a:rcurry #'transform-arg syms)
+             (args dom-request))
+       ,@(a:when-let ((summary (summary* dom-request)))
+           `((:documentation ,summary)))
+       ,@(a:when-let ((type (dom:attribute dom-request "type")))
+           `((:type (a:make-keyword (string-upcase type))))))))
 
-(defun transform-enum (dom-enum interface)
-  `(define-enum ,(enum-name dom-enum) ()
-     ,(map 'list
-            (lambda (dom-entry)
-              (list (a:make-keyword (lispify (name dom-entry)))
-                    (value dom-entry)
-                    :documentation (summary dom-entry)))
-            (entries dom-enum))
-     ,@(a:when-let ((summary (summary* dom-enum)))
-         `((:documentation ,summary)))
-     ,@(when (string= "true" (bitfield dom-enum))
-              `((:bitfield t)))))
+(defun transform-event (dom-event interface-event interface opcode syms)
+  (let ((name (event-name interface dom-event)))
+    (pushnew name (car syms))
+    `(define-event-handler (,name ,interface ,opcode)
+       ,(map 'list (a:rcurry #'transform-arg syms)
+             (args dom-event))
+       (:event-superclasses ,interface-event)
+       ,@(a:when-let ((summary (summary* dom-event)))
+           `((:documentation ,summary))))))
 
-(defun transform-interface (dom-interface)
+(defun transform-enum (dom-enum interface syms)
+  (declare (ignore interface))
+  (let ((name (enum-name interface dom-enum)))
+    ;(pushnew name (car syms))
+    `(define-enum ,name ()
+       ,(map 'list
+             (lambda (dom-entry)
+               (list (a:make-keyword (lispify (name dom-entry)))
+                     (value dom-entry)
+                     :documentation (summary dom-entry)))
+             (entries dom-enum))
+       ,@(a:when-let ((summary (summary* dom-enum)))
+           `((:documentation ,summary)))
+       ,@(when (string= "true" (bitfield dom-enum))
+           `((:bitfield t))))))
+
+(defun transform-interface (dom-interface syms)
   (let ((name (interface-name dom-interface))
         (event-name (interface-event-name dom-interface))
         (requests (requests dom-interface))
         (events (events dom-interface))
         (enums (enums dom-interface)))
-    `(progn
-       (define-interface-class ,name ()
-         ;; wl_display is specially defined, so don't stub this out.
-         ,@(when (string= (name dom-interface) "wl_display")
-             `((:skip-defclass t)))
-         (:event-class ,event-name)
+    (pushnew name (car syms))
+    (pushnew event-name (car syms))
 
-         (:interface-name ,(name dom-interface))
-         ,@(a:when-let ((summary (summary* dom-interface)))
-             `((:documentation ,summary))))
+    `((define-interface-class ,name ()
+        ;; wl_display is specially defined, so don't stub this out.
+        ,@(when (string= (name dom-interface) "wl_display")
+            `((:skip-defclass t)))
+        (:event-class ,event-name)
+
+        (:interface-name ,(name dom-interface))
+        ,@(a:when-let ((summary (summary* dom-interface)))
+            `((:documentation ,summary))))
 
        ,@(map 'list
               (lambda (dom-enum)
-                (transform-enum dom-enum name))
+                (transform-enum dom-enum name syms))
               enums)
 
        ,@(let ((opcode -1))
            (map 'list
                 (lambda (dom-request)
-                  (transform-request dom-request name (incf opcode)))
+                  (transform-request dom-request name (incf opcode) syms))
                 requests))
 
        ,@(let ((opcode -1))
            (map 'list
                 (lambda (dom-event)
-                  (transform-event dom-event event-name name (incf opcode)))
+                  (transform-event dom-event event-name name (incf opcode) syms))
                 events)))))
 
-(defun transform-protocol (dom-protocol)
-  `(progn ,@(map 'list #'transform-interface (interfaces dom-protocol))))
+(defun transform-protocol (dom-protocol syms)
+  (mapcan (a:rcurry #'transform-interface syms)
+          (coerce (interfaces dom-protocol) 'list)))
 
-(defmacro wl-include (input)
-  (let ((plump:*tag-dispatchers* plump:*xml-tags*))
-    (transform-protocol
-      (protocol (plump:parse input)))))
+(defmacro wl-include (input &key export)
+  (let ((plump:*tag-dispatchers* plump:*xml-tags*)
+        (syms (cons () nil)))
+    `(progn
+       ,@(transform-protocol
+           (protocol (plump:parse input))
+           syms)
+       ,@(when export
+          `((export ',(car syms)))))))

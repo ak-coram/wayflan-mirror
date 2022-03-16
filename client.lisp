@@ -23,6 +23,7 @@
            #:wl-display-disconnect
            #:wl-display-listen
            #:wl-display-dispatch-event
+           #:wl-display-roundtrip
 
            #:define-interface-class
            #:define-request-function
