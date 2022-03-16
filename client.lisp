@@ -24,22 +24,10 @@
            #:wl-display-listen
            #:wl-display-dispatch-event
 
-           ;; Wayland protocol
-           #:wl-display
-           #:wl-display-event
-           #:wl-display-error-event
-           #:wl-event-proxy
-           #:wl-event-code
-           #:wl-event-message
-           #:wl-display-delete-id-event
-           #:wl-event-id
-           #:wl-display-sync
-           #:wl-display-get-registry
-
-           #:wl-callback
-           #:wl-callback-event
-           #:wl-callback-done-event
-           #:wl-event-callback-data))
+           #:define-interface
+           #:define-request
+           #:define-event
+           #:define-enum))
 
 (in-package #:xyz.shunter.wayhack.client)
 
@@ -81,6 +69,9 @@
 
 (defgeneric handle-event (listener sender event)
   (:documentation "Notify a listener about an event of interest."))
+
+(defmethod handle-event (listener sender (event wl-event))
+  "By default, do nothing.")
 
 (defmethod print-object ((object wl-proxy) stream)
   (print-unreadable-object (object stream :type t :identity t)
@@ -181,12 +172,6 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
 (defclass roundtrip-listener (wl-event-listener)
   ((callback :initarg :callback)))
 
-;; Placeholder definition, will be redefined later
-(defclass wl-callback-done-event (wl-event) ())
-
-(defmethod handle-event ((listener roundtrip-listener) sender (event wl-callback-done-event))
-  (funcall (slot-value listener 'callback)))
-
 (defun wl-display-roundtrip (display)
   "Request to synchronize the display and dispatch all events until synchronization is complete."
   (let ((callback (wl-display-sync display))
@@ -203,13 +188,6 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
   "Inform all proxy's listeners of the event."
   (dolist (listener (wl-proxy-listeners sender))
     (handle-event listener sender event)))
-
-;; Stub out event for defmethod, will be redefined later.
-(defclass wl-display-delete-id-event (wl-event) ())
-
-(defmethod dispatch-event :before (display (event wl-display-delete-id-event))
-  "Mark the object as deleted and remove it from the object table."
-  (remove-proxy display (wl-event-id event)))
 
 
 
@@ -269,28 +247,35 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
 (defmacro read-arg (type sender buffer)
   "Read an object from the Wayland buffer depending on the given TYPE."
   (wltype-ecase type
-    (:uint `(wire:read-wl-uint ,buffer))
     (:int `(wire:read-wl-int ,buffer))
+    (:uint `(wire:read-wl-uint ,buffer))
+    (:fixed `(wire:read-wl-fixed ,buffer))
     (:string `(wire:read-wl-string ,buffer))
-    (:array `(wire:read-wl-array ,buffer))
     (:object `(find-proxy (wl-proxy-display ,sender)
                           (wire:read-wl-uint ,buffer)))
     ((:new-id interface)
-     `(make-proxy ,interface
-                      (wl-proxy-display ,sender)
-                      (wire:read-wl-uint ,buffer)))))
+     `(make-proxy ',interface
+                  (wl-proxy-display ,sender)
+                  (wire:read-wl-uint ,buffer)))
+    (:array `(wire:read-wl-array ,buffer))
+    (:fd `(iolib:receive-file-descriptor
+            (io:input-buffer-stream ,buffer)))))
 
-(defmacro write-arg (obj type buffer)
+(defmacro write-arg (obj type sender buffer)
   "Write an object to the Wayland buffer depending on the given TYPE."
   (wltype-ecase type
-    (:uint `(wire:write-wl-uint ,obj ,buffer))
     (:int `(wire:write-wl-int ,obj ,buffer))
+    (:uint `(wire:write-wl-uint ,obj ,buffer))
+    (:fixed `(wire:write-wl-fixed ,obj ,buffer))
     (:string `(wire:write-wl-string ,obj ,buffer))
-    (:array `(wire:write-wl-array ,obj ,buffer))
     (:object `(wire:write-wl-uint (wl-proxy-id ,obj) ,buffer))
-    (:new-id `(wire:write-wl-uint (wl-proxy-id ,obj) ,buffer))))
+    (:new-id `(wire:write-wl-uint (wl-proxy-id ,obj) ,buffer))
+    (:array `(wire:write-wl-array ,obj ,buffer))
+    (:fd `(iolib:send-file-descriptor
+            (display-socket (wl-proxy-display ,sender))
+            ,obj))))
 
-(defmacro define-interface (name &body options)
+(defmacro define-interface (name () &body options)
   "Define a wl-proxy CLOS subclass an associated wl-event CLOS subclass, and assign the interface's name to the interface table, accessible via #'FIND-INTERFACE-NAMED."
   (let ((event-name (intern (hyphenize name '#:event))))
     `(progn
@@ -308,330 +293,88 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
                           *interface-table*)
                  (find-class ',name))))))
 
-(defmacro define-enum ((interface name &rest options) &body entry-specifiers)
+(defmacro define-enum ((interface name) &body (entry-specifiers &rest options))
   "Define a parameter that associates each entry keyword with an index in the array."
-  (declare (ignore options))
-  ;; TODO implement #'decode-X and #'encode-X, sensitive to :bitfield
-  (let ((full-name (intern (format nil "+~A+" (hyphenize interface name)))))
-    `(defparameter ,full-name
-       ,(make-array (length entry-specifiers)
-                    :initial-contents (mapcar #'first entry-specifiers)))))
+  (declare (ignore interface name entry-specifiers options)))
 
-(defmacro define-request ((interface name &rest options) &body arg-specifiers)
+(defmacro define-request ((interface name opcode) &body (arg-specifiers &rest options))
   "Define a function implementing the wl request.
 
 DEFINE-REQUEST currently only supports up to one :NEW-ID argument per request."
-  (destructuring-bind (&key opcode &allow-other-keys) options
-    (let ((full-name (intern (hyphenize interface name)))
-          (new-proxy-interface
-            (dolist (specifier arg-specifiers)
-              (let ((type (getf (rest specifier) :type)))
-                (wltype-case type
-                  ((:new-id &optional interface)
-                   (return (if interface `',interface 'interface)))))))
-          (lisp-args
-            (mapcan (lambda (specifier)
-                      (specifier-bind (name &key type &allow-other-keys) specifier
-                        (wltype-case type
-                          ((:new-id &optional interface)
-                           (if interface () (list 'interface)))
-                          (t (list name)))))
-                    arg-specifiers))
-          (output-form
-            `(wire:with-output-as-message (buffer (wl-proxy-id proxy)
-                                                  ,opcode
-                                                  (display-socket (wl-proxy-display proxy)))
-               ,@(mapcar (lambda (specifier)
-                           (specifier-bind (name &key type &allow-other-keys) specifier
-                             `(write-arg ,(wltype-case type
-                                            (:new-id 'new-proxy)
-                                            (t name))
-                                         ,type
-                                         buffer)))
-                         arg-specifiers))))
-      `(defun ,full-name (proxy ,@lisp-args)
-         ,(if new-proxy-interface
-              `(let ((new-proxy (make-proxy ,new-proxy-interface (wl-proxy-display proxy))))
-                 ,output-form
-                 new-proxy)
-              output-form)))))
+  (declare (ignore options))
+  (let ((full-name (intern (hyphenize interface name)))
+        (new-proxy-interface
+          (dolist (specifier arg-specifiers)
+            (let ((type (getf (rest specifier) :type)))
+              (wltype-case type
+                ((:new-id &optional interface)
+                 (return (if interface `',interface 'interface)))))))
+        (lisp-args
+          (mapcan (lambda (specifier)
+                    (specifier-bind (name &key type &allow-other-keys) specifier
+                      (wltype-case type
+                        ((:new-id &optional interface)
+                         (if interface () (list 'interface)))
+                        (t (list name)))))
+                  arg-specifiers))
+        (output-form
+          `(wire:with-output-as-message (buffer (wl-proxy-id proxy)
+                                                ,opcode
+                                                (display-socket (wl-proxy-display proxy)))
+             ,@(mapcar (lambda (specifier)
+                         (specifier-bind (name &key type &allow-other-keys) specifier
+                           `(write-arg ,(wltype-case type
+                                          (:new-id 'new-proxy)
+                                          (t name))
+                                       ,type
+                                       proxy
+                                       buffer)))
+                       arg-specifiers))))
+    `(defun ,full-name (proxy ,@lisp-args)
+       ,(if new-proxy-interface
+            `(let ((new-proxy (make-proxy ,new-proxy-interface (wl-proxy-display proxy))))
+               ,output-form
+               new-proxy)
+            output-form))))
 
-(defmacro define-event ((interface name &rest options) &body arg-specifiers)
+(defmacro define-event ((interface name opcode) &body (arg-specifiers))
   "Define a wl-event class and a READ-EVENT method to support WL-DISPLAY-DISPATCH-EVENT."
-  (destructuring-bind (&key opcode &allow-other-keys) options
-    (let ((full-name (intern (hyphenize interface name '#:event)))
-          (parent-name (intern (hyphenize interface '#:event)))
-          (slot-specifiers
-            (mapcar (lambda (arg-specifier)
-                      (specifier-bind (name &key &allow-other-keys) arg-specifier
-                        (let ((initarg (a:make-keyword name))
-                              (reader (intern (hyphenize '#:wl-event name))))
-                          `(,name :initarg ,initarg
-                                  :reader ,reader))))
-                    arg-specifiers)))
-      `(progn
-         ;; Event class
-         (defclass ,full-name (,parent-name)
-           ,slot-specifiers)
-         ;; Event reader
-         (defmethod read-event ((proxy ,interface) (opcode (eql ,opcode)) buffer)
-           (make-instance
-             ',full-name
-             ,@(mapcan
-                 (lambda (arg-specifier)
-                   (specifier-bind (name &key type) arg-specifier
-                     (list (a:make-keyword name)
-                           `(read-arg ,type proxy buffer))))
-                 arg-specifiers)))))))
+  (let ((full-name (intern (hyphenize interface name '#:event)))
+        (parent-name (intern (hyphenize interface '#:event)))
+        (slot-specifiers
+          (mapcar (lambda (arg-specifier)
+                    (specifier-bind (name &key &allow-other-keys) arg-specifier
+                      (let ((initarg (a:make-keyword name))
+                            (reader (intern (hyphenize '#:wl-event name))))
+                        `(,name :initarg ,initarg
+                                :reader ,reader))))
+                  arg-specifiers)))
+    `(progn
+       ;; Event class
+       (defclass ,full-name (,parent-name)
+         ,slot-specifiers)
+       ;; Event reader
+       (defmethod read-event ((proxy ,interface) (opcode (eql ,opcode)) buffer)
+         (make-instance
+           ',full-name
+           ,@(mapcan
+               (lambda (arg-specifier)
+                 (specifier-bind (name &key type &allow-other-keys) arg-specifier
+                   (list (a:make-keyword name)
+                         `(read-arg ,type proxy buffer))))
+               arg-specifiers))))))
 
-
+;; Stub out some classes
+(defclass wl-callback-done-event (wl-event) ())
+(defclass wl-display-delete-id-event (wl-event) ())
+(defclass wl-display-error-event (wl-event) ())
 
-;; wl-display
+(defmethod handle-event ((listener roundtrip-listener) sender (event wl-callback-done-event))
+  (funcall (slot-value listener 'callback)))
 
-(define-interface wl-display
-  (:skip-defclass t)
-  (:name "wl_display"))
+(defmethod dispatch-event :before (display (event wl-display-delete-id-event))
+  "Mark the object as deleted and remove it from the object table."
+  (remove-proxy display (wl-event-id event)))
 
-(define-enum (wl-display #:errors :bitfield nil)
-  (:invalid-object)
-  (:invalid-method)
-  (:no-memory)
-  (:implementation))
-
-(define-request (wl-display #:sync :opcode 0)
-  (callback :type (:new-id wl-callback)))
-
-(define-request (wl-display #:get-registry :opcode 1)
-  (registry :type (:new-id wl-registry)))
-
-(define-event (wl-display #:error :opcode 0)
-  (object-id :type :object)
-  (code :type :uint)
-  (message :type :string))
-
-(define-event (wl-display #:delete-id :opcode 1)
-  (id :type :uint))
-
-;; wl-registry
-
-(define-interface wl-registry
-  (:name "wl_registry"))
-
-(define-request (wl-registry #:bind :opcode 0)
-  (name :type :string)
-  (id :type :new-id))
-
-(define-event (wl-registry #:global :opcode 0)
-  (name :type :uint)
-  (interface :type :string)
-  (version :type :uint))
-
-(define-event (wl-registry #:global-remove :opcode 1)
-  (name :type :uint))
-
-;; wl-callback
-
-(define-interface wl-callback
-  (:name "wl_callback"))
-
-(define-event (wl-callback #:done :opcode 0)
-  (callback-data :type :uint))
-
-;; wl-compositor
-
-(define-interface wl-compositor
-  (:name "wl_compositor"))
-
-(define-request (wl-compositor #:create-surface :opcode 0)
-  (id :type (:new-id wl-surface)))
-
-(define-request (wl-compositor #:create-region :opcode 1)
-  (id :type (:new-id wl-region)))
-
-;; wl-shm-pool
-
-(define-interface wl-shm-pool
-  (:name "wl_shm_pool"))
-
-(define-request (wl-shm-pool #:create-buffer :opcode 0)
-  (id :type (:new-id wl-buffer))
-  (offset :type :int)
-  (width :type :int)
-  (height :type :int)
-  (stride :type :int)
-  ;; TODO support automatic enum decoding
-  (format :type (:uint wl-shm-format)))
-
-(define-request (wl-shm-pool #:destroy
-                             :opcode 2
-                             :type :destructor))
-
-(define-request (wl-shm-pool #:resize :opcode 2)
-  (size :type :int))
-
-;; wl-shm
-
-(define-interface wl-shm
-  (:name "wl_shm"))
-
-;(define-request (wl-shm #:create-pool :opcode 0)
-;  (id :type (:new-id wl-shm-pool))
-;  (fd :type :fd)
-;  (size :type :int))
-
-(define-event (wl-shm #:format :opcode 0)
-  (format :type (:uint wl-shm-format)))
-
-(define-enum (wl-shm #:error)
-  (:invalid-format)
-  (:invalid-stride)
-  (:invalid-fd))
-
-(define-enum (wl-shm #:format)
-  (:argb8888)
-  (:xrgb8888)
-  (:c8)
-  (:rgb332)
-  (:bgr233)
-  (:xrgb4444)
-  (:xbgr4444)
-  (:rgbx4444)
-  (:bgrx4444)
-  (:argb4444)
-  (:abgr4444)
-  (:rgba4444)
-  (:bgra4444)
-  (:xrgb1555)
-  (:xbgr1555)
-  (:rgbx5551)
-  (:bgrx5551)
-  (:argb1555)
-  (:abgr1555)
-  (:rgba5551)
-  (:bgra5551)
-  (:rgb565)
-  (:bgr565)
-  (:rgb888)
-  (:bgr888)
-  (:xbgr8888)
-  (:rgbx8888)
-  (:bgrx8888)
-  (:abgr8888)
-  (:rgba8888)
-  (:bgra8888)
-  (:xrgb2101010)
-  (:xbgr2101010)
-  (:rgbx1010102)
-  (:bgrx1010102)
-  (:argb2101010)
-  (:abgr2101010)
-  (:rgba1010102)
-  (:bgra1010102)
-  (:yuyv)
-  (:yvyu)
-  (:uyvy)
-  (:vyuy)
-  (:ayuv)
-  (:nv12)
-  (:nv21)
-  (:nv16)
-  (:nv61)
-  (:yuv410)
-  (:yvu410)
-  (:yuv411)
-  (:yvu411)
-  (:yuv420)
-  (:yvu420)
-  (:yuv422)
-  (:yvu422)
-  (:yuv444)
-  (:yvu444)
-  (:r8)
-  (:r16)
-  (:rg88)
-  (:gr88)
-  (:rg1616)
-  (:gr1616)
-  (:xrgb16161616f)
-  (:xbgr16161616f)
-  (:argb16161616f)
-  (:abgr16161616f)
-  (:xyuv8888)
-  (:vuy888)
-  (:vuy101010)
-  (:y210)
-  (:y212)
-  (:y216)
-  (:y410)
-  (:y412)
-  (:y416)
-  (:xvyu2101010)
-  (:xvyu12_16161616)
-  (:xvyu16161616)
-  (:y0l0)
-  (:x0l0)
-  (:y0l2)
-  (:x0l2)
-  (:yuv420_8bit)
-  (:yuv420_10bit)
-  (:xrgb8888_a8)
-  (:xbgr8888_a8)
-  (:rgbx8888_a8)
-  (:bgrx8888_a8)
-  (:rgb888_a8)
-  (:bgr888_a8)
-  (:rgb565_a8)
-  (:bgr565_a8)
-  (:nv24)
-  (:nv42)
-  (:p210)
-  (:p010)
-  (:p012)
-  (:p016)
-  (:axbxgxrx106106106106)
-  (:nv15)
-  (:q410)
-  (:q401)
-  (:xrgb16161616)
-  (:xbgr16161616)
-  (:argb16161616)
-  (:abgr16161616)
-  (:argb8888)
-  (:xrgb8888)
-  (:c8)
-  (:rgb332)
-  (:bgr233)
-  (:xrgb4444)
-  (:xbgr4444)
-  (:rgbx4444)
-  (:bgrx4444))
-
-;; wl-buffer
-
-(define-interface wl-buffer
-  (:name "wl_buffer"))
-
-(define-request (wl-buffer #:destroy
-                           :opcode 0
-                           :type :destructor))
-
-(define-event (wl-buffer #:release :opcode 0))
-
-
-
-(defclass test-listener (wl-event-listener) ())
-
-(defmethod handle-event ((listener test-listener) proxy (event wl-registry-global-event))
-  (format t "#x~8,'0X  ~35A  v~D~%"
-          (wl-event-name event)
-          (wl-event-interface event)
-          (wl-event-version event)))
-
-(defun test ()
-  (let ((display (wl-display-connect)))
-    (unwind-protect
-      (let ((registry (wl-display-get-registry display)))
-        (push (make-instance 'test-listener)
-              (wl-proxy-listeners registry))
-        (wl-display-roundtrip display))
-      (wl-display-disconnect display))))
+(defmethod dispatch-event :before (display (event wl-display-error-event))
+  (error "Wl-error event dispatched"))

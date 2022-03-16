@@ -6,7 +6,9 @@
   :depends-on (#:alexandria
                #:fast-io
                #:iolib
+               #:plump
                #:posix-shm
                #:trivial-features)
   :components ((:file #:wire)
-               (:file #:client)))
+               (:file #:client)
+               (:file #:autowrap)))
