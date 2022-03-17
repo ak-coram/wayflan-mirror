@@ -45,7 +45,12 @@ The wayland-wire package defines utilities for communicating primitive data thro
            #:wl-proxy-listeners
            #:wl-deleted-proxy
            #:wl-event
+           #:wl-event-sender
            #:wl-event-listener
+           #:wl-error
+           #:wl-error-object
+           #:wl-error-code
+           #:wl-error-message
            #:read-event
            #:handle-event
 

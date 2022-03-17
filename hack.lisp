@@ -19,3 +19,22 @@
               (wl-proxy-listeners registry))
         (wl-display-roundtrip display))
       (wl-display-disconnect display))))
+
+(defmethod handle-event ((listener test-listener) proxy (event wl-display-error-event))
+  (format t "Error: object-id=~D, code=~D, message=~S~%"
+          (wl-event-object-id event)
+          (wl-event-code event)
+          (wl-event-message event)))
+
+(define-request (wl-display-invalid-request wl-display 10)
+  ((some-int :type :int))
+  (:documentation "Make an invalid Wayland request"))
+
+(defun test ()
+  (let ((display (wl-display-connect)))
+    (unwind-protect
+      (progn
+        (push (make-instance 'test-listener) (wl-proxy-listeners display))
+        (wl-display-invalid-request display 10)
+        (wl-display-roundtrip display))
+      (wl-display-disconnect display))))

@@ -29,7 +29,25 @@
   (:documentation "A connection to the compositor that acts as a proxy to the wl_display singleton object"))
 
 (defclass wl-event ()
-  ((sender :initarg :sender :reader wl-event-sender)))
+  ((sender :initarg :sender :reader wl-event-sender
+           :documentation "Proxy of the object that sent the event")))
+
+(define-condition wl-error (error)
+  ((%object :initarg :object :reader wl-error-object
+           :type (or wl-proxy null)
+           :documentation "object where the error occurred")
+   (%code :initarg :code :reader wl-error-code
+         :type (unsigned-byte 32)
+         :documentation "error code")
+   (message :initarg :message :reader wl-error-message
+            :type string
+            :documentation "error description"))
+  (:report (lambda (cond stream)
+             (format stream "Error code ~D from ~S: ~A"
+                     (wl-error-code cond)
+                     (wl-error-object cond)
+                     (wl-error-message cond)))))
+
 
 ;; handle-event protocol -- implemented by subclasses of wl-event-listener
 
@@ -117,7 +135,7 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
   (:documentation "Inform a proxy about an event of interest. Usually, emit the event across its listeners."))
 
 (defmethod dispatch-event (sender event)
-  "Inform all proxy's listeners of the event."
+  "Inform all sender's listeners of the event."
   (dolist (listener (wl-proxy-listeners sender))
     (handle-event listener sender event)))
 
@@ -126,7 +144,13 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
   (remove-proxy display (wl-event-id event)))
 
 (defmethod dispatch-event :before (display (event wl-display-error-event))
-  (error "Wl-error event dispatched"))
+  ;; Errors are fatal. When an error is received, the display can no longer be
+  ;; used.
+  (wl-display-disconnect display)
+  (error 'wl-error
+         :object (wl-event-object-id event)
+         :code (wl-event-code event)
+         :message (wl-event-message event)))
 
 (defclass roundtrip-listener (wl-event-listener)
   ((callback :initarg :callback))
@@ -156,11 +180,17 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
                              (uiop:unix-namestring
                                (display-pathname display-name))))))
 
-(defun wl-display-disconnect (display)
-  "Close the connection and remove all proxies."
+(defgeneric wl-display-disconnect (display)
+  (:documentation "Close the display connection and remove all proxies."))
+
+(defmethod wl-display-disconnect ((display wl-display))
   (prog1
     (close (display-socket display))
     (clear-proxies display)))
+
+(defmethod wl-display-disconnect ((display wl-deleted-proxy))
+  ;; Assume the proxy was a deleted display, do nothing.
+  nil)
 
 (defun wl-display-listen (display)
   "Return whether there is a (partial) message available from the display."
@@ -419,5 +449,6 @@ OPTIONS:
                                   (,opcode-sym (eql ,opcode))
                                   ,buffer)
              ,@documentation
-             (make-instance ',name ,@initargs)))))))
-
+             (make-instance ',name
+                            :sender ,proxy
+                            ,@initargs)))))))
