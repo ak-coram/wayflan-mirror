@@ -1,3 +1,8 @@
+;;; wayhack.asd -- System definition
+;;;
+;;; Copyright (c) 2022 Samuel Hunter.
+;;; All rights reserved.
+
 (defsystem #:wayhack
   :version "0.0.0"
   :author "Samuel Hunter"

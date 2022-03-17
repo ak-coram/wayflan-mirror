@@ -1,4 +1,7 @@
-;;; client.lisp -- fun
+;;; client.lisp -- Wayland client implementation
+;;;
+;;; Copyright (c) 2022 Samuel Hunter.
+;;; All rights reserved.
 
 (in-package #:xyz.shunter.wayhack.client)
 
@@ -32,17 +35,15 @@
   ()
   (:documentation "Classes subclassing Wl-EVENT-LISTENER advertise that they implement HANDLE-EVENT."))
 
-(defgeneric read-event (sender opcode buffer)
-  (:documentation "Read an event sent from PROXY with the given OPCODE and fast-io BUFFER."))
-
-(defgeneric dispatch-event (sender event)
-  (:documentation "Inform a proxy about an event of interest. Usually, emit the event across its listeners."))
-
 (defgeneric handle-event (listener sender event)
   (:documentation "Notify a listener about an event of interest."))
 
-(defmethod handle-event (listener sender (event wl-event))
-  "By default, do nothing.")
+(defgeneric read-event (sender opcode buffer)
+  (:documentation "Read an event sent from PROXY with the given OPCODE and fast-io BUFFER.
+READ-EVENT methods are defined by DEFINE-EVENT-READER."))
+
+(defgeneric dispatch-event (sender event)
+  (:documentation "Inform a proxy about an event of interest. Usually, emit the event across its listeners."))
 
 (defmethod print-object ((object wl-proxy) stream)
   (print-unreadable-object (object stream :type t :identity t)
@@ -266,7 +267,7 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
             (display-socket (wl-proxy-display ,sender))
             ,obj))))
 
-(defmacro define-interface-class (name () &body options)
+(defmacro define-interface (name () &body options)
   "Define a wl-proxy CLOS subclass an associated wl-event CLOS subclass, and assign the interface's name to the interface table, accessible via #'FIND-INTERFACE-NAMED."
   (option-bind (documentation event-class skip-defclass interface-name) options
     `(progn
@@ -292,7 +293,7 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
   "Define a parameter that associates each entry keyword with an index in the array."
   (declare (ignore name entry-specifiers options)))
 
-(defmacro define-request-function ((name interface opcode) &body (arg-specifiers &rest options))
+(defmacro define-request ((name interface opcode) &body (arg-specifiers &rest options))
   "Define a function implementing the wl request.
 
 DEFINE-REQUEST currently only supports up to one :NEW-ID argument per request."
@@ -341,7 +342,7 @@ DEFINE-REQUEST currently only supports up to one :NEW-ID argument per request."
                    ,new-proxy)
                 output-form))))))
 
-(defmacro define-event-handler ((name interface opcode) &body (arg-specifiers &rest options))
+(defmacro define-event ((name interface opcode) &body (arg-specifiers &rest options))
   "Define a wl-event class and a READ-EVENT method to support WL-DISPLAY-DISPATCH-EVENT."
   (option-bind (documentation event-superclasses) options
     (a:with-gensyms (proxy opcode-sym buffer)

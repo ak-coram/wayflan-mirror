@@ -1,4 +1,7 @@
-;;; protocols.lisp - Stable protocol implementation
+;;; protocols.lisp -- Stable protocols implementations
+;;;
+;;; Copyright (c) 2022 Samuel Hunter.
+;;; All rights reserved.
 
 ;; The current wayland.xml is from wayland release 1.20.0 (Dec 2021)
 ;;

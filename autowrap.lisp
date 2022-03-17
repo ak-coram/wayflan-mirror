@@ -1,22 +1,9 @@
-(defpackage #:xyz.shunter.wayhack.autowrap
-  (:use #:cl)
-  (:local-nicknames (#:a #:alexandria)
-                    (#:dom #:org.shirakumo.plump.dom))
-  (:import-from #:xyz.shunter.wayhack.client
-                #:define-interface-class
-                #:define-request-function
-                #:define-event-handler
-                #:define-enum
-                #:wl-display)
-  (:export #:wl-include))
+;;; autowrap.lisp -- Protocol XML definition auto-wrapper
+;;;
+;;; Copyright (c) 2022 Samuel Hunter.
+;;; All rights reserved.
 
 (in-package #:xyz.shunter.wayhack.autowrap)
-
-
-
-(defparameter *dom*
-  (let ((plump:*tag-dispatchers* plump:*xml-tags*))
-    (plump:parse #P"protocols/wayland.xml")))
 
 ;; DOM-walking utils and macros
 
@@ -130,7 +117,9 @@
                      '#:event)))
 
 (defun enum-name (interface-name dom-enum)
-  (make-symbol (hyphenize interface-name (name dom-enum))))
+  (intern (format nil "~A.~A"
+                  (lispify interface-name)
+                  (lispify (name dom-enum)))))
 
 (defun arg-name (dom-arg)
   (intern (hyphenize '#:wl-event (name dom-arg))))
@@ -141,7 +130,7 @@
   (a:eswitch ((dom:attribute dom-arg "type") :test 'string=)
     ("int" :int)
     ("uint" (a:if-let ((enum (dom:attribute dom-arg "enum")))
-              (list :uint enum)
+              (list :uint (intern (lispify enum)))
               :uint))
     ("fixed" :fixed)
     ("string" :string)
@@ -167,8 +156,7 @@
   (let ((name (request-name interface dom-request)))
     (pushnew name (car syms))
 
-    `(define-request-function
-       ,(list name interface opcode)
+    `(define-request ,(list name interface opcode)
        ,(map 'list (a:rcurry #'transform-arg syms)
              (args dom-request))
        ,@(a:when-let ((summary (summary* dom-request)))
@@ -179,17 +167,15 @@
 (defun transform-event (dom-event interface-event interface opcode syms)
   (let ((name (event-name interface dom-event)))
     (pushnew name (car syms))
-    `(define-event-handler (,name ,interface ,opcode)
+    `(define-event ,(list name interface opcode)
        ,(map 'list (a:rcurry #'transform-arg syms)
              (args dom-event))
        (:event-superclasses ,interface-event)
        ,@(a:when-let ((summary (summary* dom-event)))
            `((:documentation ,summary))))))
 
-(defun transform-enum (dom-enum interface syms)
-  (declare (ignore interface))
+(defun transform-enum (dom-enum interface)
   (let ((name (enum-name interface dom-enum)))
-    ;(pushnew name (car syms))
     `(define-enum ,name ()
        ,(map 'list
              (lambda (dom-entry)
@@ -211,7 +197,7 @@
     (pushnew name (car syms))
     (pushnew event-name (car syms))
 
-    `((define-interface-class ,name ()
+    `((define-interface ,name ()
         ;; wl_display is specially defined, so don't stub this out.
         ,@(when (string= (name dom-interface) "wl_display")
             `((:skip-defclass t)))
@@ -223,7 +209,7 @@
 
        ,@(map 'list
               (lambda (dom-enum)
-                (transform-enum dom-enum name syms))
+                (transform-enum dom-enum name))
               enums)
 
        ,@(let ((opcode -1))

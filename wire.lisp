@@ -1,4 +1,7 @@
-;;; wire.lisp - Wayland primitive data communication
+;;; wire.lisp -- Wayland primitive data communication
+;;;
+;;; Copyright (c) 2022 Samuel Hunter.
+;;; All rights reserved.
 
 (in-package #:xyz.shunter.wayhack.wire)
 

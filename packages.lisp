@@ -1,4 +1,7 @@
-;;; packages.lisp - package definitions for client & all stable protocols
+;;; packages.lisp -- package definitions for client & all stable protocols
+;;;
+;;; Copyright (c) 2022 Samuel Hunter.
+;;; All rights reserved.
 
 (defpackage #:xyz.shunter.wayhack.wire
   (:use #:cl)
@@ -47,25 +50,71 @@ The wayland-wire package defines utilities for communicating primitive data thro
            #:handle-event
 
            #:find-interface-named
+
            #:find-proxy
            #:make-proxy
            #:display-pathname
+           #:wl-display
            #:wl-display-connect
            #:wl-display-disconnect
            #:wl-display-listen
            #:wl-display-dispatch-event
            #:wl-display-roundtrip
 
-           #:define-interface-class
+           #:define-interface
            #:define-enum
-           #:define-request-function
-           #:define-event-handler)
-  (:documentation "Wayland client implementation
+           #:define-request
+           #:define-event)
+  (:documentation "Wayland client and core protocol implementation.
 
 Wayland is a protocol for a compositor to talk to its clients.
 The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
-The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers."))
+The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
 
-(defpackage #:xyz.shunter.wayhack.client.presentation-time)
-(defpackage #:xyz.shunter.wayhack.client.viewporter)
-(defpackage #:xyz.shunter.wayhack.client.xdg-shell)
+This package defines the client's interpretation of various CLOS classes, the event protocol, define- macros to implement wayland protocols, and the core Wayland protocol."))
+
+(defpackage #:xyz.shunter.wayhack.autowrap
+  (:use #:cl)
+  (:local-nicknames (#:a #:alexandria)
+                    (#:dom #:org.shirakumo.plump.dom))
+  (:import-from #:xyz.shunter.wayhack.client
+                #:define-interface
+                #:define-enum
+                #:define-request
+                #:define-event
+                #:wl-display)
+  (:export #:wl-include)
+  (:documentation "Wayland XML protocol autowrapper
+
+Wayland is a protocol for a compositor to talk to its clients.
+The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
+The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
+
+This package defines WL-INCLUDE, a macro that transforms a Wayland protocol described in an XML file into wayhack definition forms."))
+
+(defpackage #:xyz.shunter.wayhack.client.presentation-time
+  (:documentation "Wayland Presentation time protocol implementation.
+
+Wayland is a protocol for a compositor to talk to its clients.
+The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
+The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
+
+This package implements the stable Presentation time protocol."))
+
+(defpackage #:xyz.shunter.wayhack.client.viewporter
+  (:documentation "Wayland Viewporter protocol implementation.
+
+Wayland is a protocol for a compositor to talk to its clients.
+The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
+The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
+
+This package implements the stable Viewporter protocol."))
+
+(defpackage #:xyz.shunter.wayhack.client.xdg-shell
+  (:documentation "Wayland XDG shell protocol implementation.
+
+Wayland is a protocol for a compositor to talk to its clients.
+The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
+The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
+
+This package implements the stable XDG shell protocol."))
