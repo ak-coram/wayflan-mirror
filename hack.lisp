@@ -1,17 +1,7 @@
-(in-package #:xyz.shunter.wayhack.client)
-
-(xyz.shunter.wayhack.autowrap:wl-include
-  #P"protocols/wayland.xml"
-  :export t)
-
-
-
 (defpackage #:xyz.shunter.wayhack.hack
   (:use #:cl #:xyz.shunter.wayhack.client))
 
 (in-package #:xyz.shunter.wayhack.hack)
-
-
 
 (defclass test-listener (wl-event-listener) ())
 

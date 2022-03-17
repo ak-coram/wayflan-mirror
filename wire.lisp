@@ -1,35 +1,5 @@
 ;;; wire.lisp - Wayland primitive data communication
 
-(defpackage #:xyz.shunter.wayhack.wire
-  (:use #:cl)
-  (:local-nicknames (#:io #:fast-io)
-                    (#:a #:alexandria))
-  (:export #:wl-int
-           #:wl-uint
-
-           #:read-wl-int
-           #:read-wl-uint
-           #:read-wl-fixed
-           #:read-wl-string
-           #:read-wl-array
-           #:read-wl-message
-           #:with-input-from-message
-
-           #:write-wl-int
-           #:write-wl-uint
-           #:write-wl-fixed
-           #:write-wl-string
-           #:write-wl-array
-           #:write-wl-message
-           #:with-output-as-message)
-  (:documentation "Wayland primitive data communication.
-
-Wayland is a protocol for a compositor to talk to its clients.
-The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
-The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
-
-The wayland-wire package defines utilities for communicating primitive data through a fast-io buffer connected to a Wayland UNIX socket stream."))
-
 (in-package #:xyz.shunter.wayhack.wire)
 
 

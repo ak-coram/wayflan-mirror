@@ -1,35 +1,5 @@
 ;;; client.lisp -- fun
 
-(defpackage #:xyz.shunter.wayhack.client
-  (:use #:cl)
-  (:local-nicknames (#:a #:alexandria)
-                    (#:io #:fast-io)
-                    (#:wire #:xyz.shunter.wayhack.wire))
-  (:export #:wl-proxy
-           #:wl-proxy-id
-           #:wl-proxy-display
-           #:wl-proxy-listeners
-           #:wl-deleted-proxy
-           #:wl-event
-           #:wl-event-listener
-           #:read-event
-           #:handle-event
-
-           #:find-interface-named
-           #:find-proxy
-           #:make-proxy
-           #:display-pathname
-           #:wl-display-connect
-           #:wl-display-disconnect
-           #:wl-display-listen
-           #:wl-display-dispatch-event
-           #:wl-display-roundtrip
-
-           #:define-interface-class
-           #:define-request-function
-           #:define-event-handler
-           #:define-enum))
-
 (in-package #:xyz.shunter.wayhack.client)
 
 
@@ -185,10 +155,26 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
 
 ;; Event handling
 
+;; Stub out some classes for now -- it'll be redefined by WL-INCLUDE in
+;; protocols.lisp
+(defclass wl-callback-done-event (wl-event) ())
+(defclass wl-display-delete-id-event (wl-event) ())
+(defclass wl-display-error-event (wl-event) ())
+
+(defmethod handle-event ((listener roundtrip-listener) sender (event wl-callback-done-event))
+  (funcall (slot-value listener 'callback)))
+
 (defmethod dispatch-event (sender event)
   "Inform all proxy's listeners of the event."
   (dolist (listener (wl-proxy-listeners sender))
     (handle-event listener sender event)))
+
+(defmethod dispatch-event :before (display (event wl-display-delete-id-event))
+  "Mark the object as deleted and remove it from the object table."
+  (remove-proxy display (wl-event-id event)))
+
+(defmethod dispatch-event :before (display (event wl-display-error-event))
+  (error "Wl-error event dispatched"))
 
 
 
@@ -390,17 +376,3 @@ DEFINE-REQUEST currently only supports up to one :NEW-ID argument per request."
              ,@documentation
              (make-instance ',name ,@initargs)))))))
 
-;; Stub out some classes
-(defclass wl-callback-done-event (wl-event) ())
-(defclass wl-display-delete-id-event (wl-event) ())
-(defclass wl-display-error-event (wl-event) ())
-
-(defmethod handle-event ((listener roundtrip-listener) sender (event wl-callback-done-event))
-  (funcall (slot-value listener 'callback)))
-
-(defmethod dispatch-event :before (display (event wl-display-delete-id-event))
-  "Mark the object as deleted and remove it from the object table."
-  (remove-proxy display (wl-event-id event)))
-
-(defmethod dispatch-event :before (display (event wl-display-error-event))
-  (error "Wl-error event dispatched"))

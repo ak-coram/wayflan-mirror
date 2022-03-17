@@ -9,6 +9,10 @@
                #:plump
                #:posix-shm
                #:trivial-features)
-  :components ((:file #:wire)
+
+  :components ((:file #:packages)
+               (:file #:wire)
                (:file #:client)
-               (:file #:autowrap)))
+               (:file #:autowrap)
+               (:file #:protocols))
+  :serial t)
