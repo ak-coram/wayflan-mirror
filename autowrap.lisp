@@ -162,7 +162,7 @@
        ,@(a:when-let ((summary (summary* dom-request)))
            `((:documentation ,summary)))
        ,@(a:when-let ((type (dom:attribute dom-request "type")))
-           `((:type (a:make-keyword (string-upcase type))))))))
+           `((:type ,(a:make-keyword (string-upcase type))))))))
 
 (defun transform-event (dom-event interface-event interface opcode syms)
   (let ((name (event-name interface dom-event)))

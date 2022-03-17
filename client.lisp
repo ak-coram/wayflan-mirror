@@ -358,7 +358,7 @@ ARG-SPECIFIERS - Each specifier takes the lambda list (name &key type documentat
 OPTIONS:
 
 (:DOCUMENTATION DOCSTRING) - Provided to the function as its docstring."
-  (option-bind (documentation) options
+  (option-bind (documentation type) options
     (a:with-gensyms (proxy buffer new-proxy)
       (let* ((new-proxy-interface
                ;; If a new proxy is being created, in this request, the form to
@@ -381,27 +381,32 @@ OPTIONS:
                                 (list new-proxy-interface)))
                              (t (list name)))))
                        arg-specifiers))
-             (output-form
-               `(wire:with-output-as-message (,buffer (wl-proxy-id ,proxy)
-                                                      ,opcode
-                                                      (display-socket (wl-proxy-display ,proxy)))
-                  ,@(mapcar (lambda (specifier)
-                              (specifier-bind (name &key type &allow-other-keys) specifier
-                                `(write-arg ,(wltype-case type
-                                               (:new-id new-proxy)
-                                               (t name))
-                                            ,type
-                                            ,proxy
-                                            ,buffer)))
-                            arg-specifiers))))
+             (output-body
+               `((wire:with-output-as-message (,buffer (wl-proxy-id ,proxy)
+                                                       ,opcode
+                                                       (display-socket (wl-proxy-display ,proxy)))
+                   ,@(mapcar (lambda (specifier)
+                               (specifier-bind (name &key type &allow-other-keys) specifier
+                                 `(write-arg ,(wltype-case type
+                                                (:new-id new-proxy)
+                                                (t name))
+                                             ,type
+                                             ,proxy
+                                             ,buffer)))
+                             arg-specifiers))
+                 ,@(when (eq (first type) :destructor)
+                     `((remove-proxy (wl-proxy-display ,proxy)
+                                     (wl-proxy-id ,proxy)))))))
         `(defun ,name ,(list* proxy lambda-list-tail)
            ,@documentation
            (check-type ,proxy ,interface)
            ,(if new-proxy-interface
                 `(let ((,new-proxy (make-proxy ,new-proxy-interface (wl-proxy-display ,proxy))))
-                   ,output-form
+                   ,@output-body
                    ,new-proxy)
-                output-form))))))
+                (if (> 1 (length output-body))
+                    `(progn ,@output-body)
+                    (first output-body))))))))
 
 (defmacro define-event ((name interface opcode) &body (arg-specifiers &rest options))
   "Define a class and a READ-EVENT method to support WL-DISPLAY-DISPATCH-EVENT.
