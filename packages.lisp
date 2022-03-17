@@ -43,7 +43,7 @@ The wayland-wire package defines utilities for communicating primitive data thro
            #:wl-proxy-id
            #:wl-proxy-display
            #:wl-proxy-listeners
-           #:wl-deleted-proxy
+           #:wl-destroyed-proxy
            #:wl-event
            #:wl-event-sender
            #:wl-event-listener
@@ -53,11 +53,13 @@ The wayland-wire package defines utilities for communicating primitive data thro
            #:wl-error-message
            #:read-event
            #:handle-event
+           #:decode-enum
+           #:encode-enum
 
            #:find-interface-named
-
            #:find-proxy
            #:make-proxy
+           #:destroy-proxy
            #:display-pathname
            #:wl-display
            #:wl-display-connect

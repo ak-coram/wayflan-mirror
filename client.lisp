@@ -19,7 +19,7 @@
               :accessor wl-proxy-listeners))
   (:documentation "A protocol object on the client side"))
 
-(defclass wl-deleted-proxy (wl-proxy)
+(defclass wl-destroyed-proxy (wl-proxy)
   ()
   (:documentation "A proxy that has since been deleted by the compositor."))
 
@@ -76,6 +76,15 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
   (gethash name *interface-table*))
 
 
+;; coding protocol -- implemented by define-enum
+
+(defgeneric decode-enum (enum number)
+  (:documentation "Decode a uint into an enumeration value. This value can either be a scalar (which results in a single keyword) or bitfield (which results in a list of keywords)."))
+
+(defgeneric encode-enum (enum value)
+  (:documentation "Decode an enumeration value into a uint."))
+
+
 ;; Proxy management
 
 (defun find-proxy (display id)
@@ -88,10 +97,9 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
   (setf (slot-value new-proxy 'object-id) id
         (gethash id (slot-value display 'proxy-table)) new-proxy))
 
-(defun remove-proxy (display id)
-  "Mark the proxy with the given ID as removed."
-  (change-class (find-proxy display id) 'wl-deleted-proxy)
-  (remhash id (slot-value display 'proxy-table))
+(defun destroy-proxy (proxy)
+  "Delist the proxy from its display and mark it as destroyed."
+  (change-class proxy 'wl-destroyed-proxy)
   (values))
 
 (defun clear-proxies (display)
@@ -101,7 +109,7 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
       (loop
         (multiple-value-bind (more? id proxy) (next-item)
           (unless more? (return))
-          (change-class proxy 'wl-deleted-proxy)
+          (change-class proxy 'wl-destroyed-proxy)
           (remhash id proxy-table)))))
   (values))
 
@@ -140,8 +148,11 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
     (handle-event listener sender event)))
 
 (defmethod dispatch-event :before (display (event wl-display-delete-id-event))
-  "Mark the object as deleted and remove it from the object table."
-  (remove-proxy display (wl-event-id event)))
+  "Mark the object as destroyed and remove it from the object table."
+  (let* ((id (wl-event-id event))
+         (proxy (find-proxy display id)))
+    (change-class proxy 'wl-destroyed-proxy)
+    (remhash id (slot-value display 'proxy-table))))
 
 (defmethod dispatch-event :before (display (event wl-display-error-event))
   ;; Errors are fatal. When an error is received, the display can no longer be
@@ -188,7 +199,7 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
     (close (display-socket display))
     (clear-proxies display)))
 
-(defmethod wl-display-disconnect ((display wl-deleted-proxy))
+(defmethod wl-display-disconnect ((display wl-destroyed-proxy))
   ;; Assume the proxy was a deleted display, do nothing.
   nil)
 
@@ -207,13 +218,17 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
 
 (defun wl-display-roundtrip (display)
   "Request to synchronize the display and dispatch all events until synchronization is complete."
+  (declare (optimize debug))
   (let ((callback (wl-display-sync display))
         (sync-complete nil))
-    (push (make-instance 'roundtrip-listener
-                         :callback (lambda () (setf sync-complete t)))
-          (wl-proxy-listeners callback))
-    (loop :until sync-complete
-          :do (wl-display-dispatch-event display))))
+    (unwind-protect
+      (progn
+        (push (make-instance 'roundtrip-listener
+                             :callback (lambda () (setf sync-complete t)))
+              (wl-proxy-listeners callback))
+        (do () (sync-complete)
+            (wl-display-dispatch-event display)))
+      (destroy-proxy callback))))
 
 ;; Event handling
 
@@ -280,12 +295,26 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
   "Read an object from the Wayland buffer depending on the given TYPE."
   (wltype-ecase type
     (:int `(wire:read-wl-int ,buffer))
-    (:uint `(wire:read-wl-uint ,buffer))
+    ((:uint &optional enum)
+     (if enum
+         `(decode-enum ',enum (wire:read-wl-uint ,buffer))
+         `(wire:read-wl-uint ,buffer)))
     (:fixed `(wire:read-wl-fixed ,buffer))
     (:string `(wire:read-wl-string ,buffer))
     (:object `(find-proxy (wl-proxy-display ,sender)
                           (wire:read-wl-uint ,buffer)))
-    ((:new-id interface)
+    ((:new-id &optional interface)
+     (if interface
+         `(make-proxy ',interface
+                      (wl-proxy-display ,sender)
+                      (wire:read-wl-uint ,buffer))
+         `(let ((interface (find-interface-named (wire:read-wl-string ,buffer)))
+                (version (wire:read-wl-uint ,buffer)))
+            ;; TODO add version support to proxies
+            (declare (ignore version))
+            (make-proxy interface
+                        (wl-proxy-display ,sender)
+                        (wire:read-wl-uint ,buffer))))
      `(make-proxy ',interface
                   (wl-proxy-display ,sender)
                   (wire:read-wl-uint ,buffer)))
@@ -297,7 +326,10 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
   "Write an object to the Wayland buffer depending on the given TYPE."
   (wltype-ecase type
     (:int `(wire:write-wl-int ,obj ,buffer))
-    (:uint `(wire:write-wl-uint ,obj ,buffer))
+    ((:uint &optional enum)
+     `(wire:write-wl-uint
+        ,(if enum `(encode-enum ',enum ,obj) obj)
+        ,buffer))
     (:fixed `(wire:write-wl-fixed ,obj ,buffer))
     (:string `(wire:write-wl-string ,obj ,buffer))
     (:object `(wire:write-wl-uint (wl-proxy-id ,obj) ,buffer))
@@ -395,10 +427,10 @@ OPTIONS:
                                              ,buffer)))
                              arg-specifiers))
                  ,@(when (eq (first type) :destructor)
-                     `((remove-proxy (wl-proxy-display ,proxy)
-                                     (wl-proxy-id ,proxy)))))))
+                     `((destroy-proxy ,proxy))))))
         `(defun ,name ,(list* proxy lambda-list-tail)
            ,@documentation
+           (declare (optimize debug))
            (check-type ,proxy ,interface)
            ,(if new-proxy-interface
                 `(let ((,new-proxy (make-proxy ,new-proxy-interface (wl-proxy-display ,proxy))))
@@ -454,6 +486,7 @@ OPTIONS:
                                   (,opcode-sym (eql ,opcode))
                                   ,buffer)
              ,@documentation
+             (declare (optimize debug))
              (make-instance ',name
                             :sender ,proxy
                             ,@initargs)))))))

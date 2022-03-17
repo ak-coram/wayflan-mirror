@@ -181,5 +181,5 @@
   (a:once-only (output)
     `(let ((body (io:with-fast-output (,buffer) ,@body)))
        (io:with-fast-output (buffer ,output)
-         (write-wl-message ,sender-id ,opcode body buffer))
+         (write-wl-message ,sender-id ,opcode (print body) buffer))
        (force-output ,output))))

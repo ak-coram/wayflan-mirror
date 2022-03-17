@@ -12,7 +12,6 @@
                #:fast-io
                #:iolib
                #:plump
-               #:posix-shm
                #:trivial-features)
 
   :components ((:file #:packages)
