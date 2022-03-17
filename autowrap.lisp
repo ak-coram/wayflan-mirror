@@ -229,6 +229,10 @@
           (coerce (interfaces dom-protocol) 'list)))
 
 (defmacro wl-include (input &key export)
+  "Define the collection of interfaces, enums, requests, and events described by INPUT, for use by a Wayland client.
+
+INPUT - A stream to an XML file, a pathname to an XML file, or an XML string.
+EXPORT - If true, export all interned symbols in the current package."
   (let ((plump:*tag-dispatchers* plump:*xml-tags*)
         (syms (cons () nil)))
     `(progn

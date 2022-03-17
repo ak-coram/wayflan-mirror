@@ -31,6 +31,8 @@
 (defclass wl-event ()
   ((sender :initarg :sender :reader wl-event-sender)))
 
+;; handle-event protocol -- implemented by subclasses of wl-event-listener
+
 (defclass wl-event-listener ()
   ()
   (:documentation "Classes subclassing Wl-EVENT-LISTENER advertise that they implement HANDLE-EVENT."))
@@ -38,12 +40,12 @@
 (defgeneric handle-event (listener sender event)
   (:documentation "Notify a listener about an event of interest."))
 
+
+;; read-event protocol -- implemented by define-event
+
 (defgeneric read-event (sender opcode buffer)
   (:documentation "Read an event sent from PROXY with the given OPCODE and fast-io BUFFER.
 READ-EVENT methods are defined by DEFINE-EVENT-READER."))
-
-(defgeneric dispatch-event (sender event)
-  (:documentation "Inform a proxy about an event of interest. Usually, emit the event across its listeners."))
 
 (defmethod print-object ((object wl-proxy) stream)
   (print-unreadable-object (object stream :type t :identity t)
@@ -54,6 +56,7 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
 (defun find-interface-named (name)
   "Return the interface linked to the given string NAME."
   (gethash name *interface-table*))
+
 
 ;; Proxy management
 
@@ -101,6 +104,37 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
   (setf (slot-value instance 'display) instance)
   (set-proxy instance 1 instance))
 
+
+;; Event handling
+
+;; Stub out some classes for now -- it'll be redefined by WL-INCLUDE in
+;; protocols.lisp
+(defclass wl-callback-done-event (wl-event) ())
+(defclass wl-display-delete-id-event (wl-event) ())
+(defclass wl-display-error-event (wl-event) ())
+
+(defgeneric dispatch-event (sender event)
+  (:documentation "Inform a proxy about an event of interest. Usually, emit the event across its listeners."))
+
+(defmethod dispatch-event (sender event)
+  "Inform all proxy's listeners of the event."
+  (dolist (listener (wl-proxy-listeners sender))
+    (handle-event listener sender event)))
+
+(defmethod dispatch-event :before (display (event wl-display-delete-id-event))
+  "Mark the object as deleted and remove it from the object table."
+  (remove-proxy display (wl-event-id event)))
+
+(defmethod dispatch-event :before (display (event wl-display-error-event))
+  (error "Wl-error event dispatched"))
+
+(defclass roundtrip-listener (wl-event-listener)
+  ((callback :initarg :callback))
+  (:documentation "Used by WL-DISPLAY-ROUNDTRIP to funcall an assigned closure."))
+
+(defmethod handle-event ((listener roundtrip-listener) sender (event wl-callback-done-event))
+  (funcall (slot-value listener 'callback)))
+
 ;; Display management
 
 (defun display-pathname (&optional display-name)
@@ -141,9 +175,6 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
             event (read-event sender opcode buffer))
       (dispatch-event sender event))))
 
-(defclass roundtrip-listener (wl-event-listener)
-  ((callback :initarg :callback)))
-
 (defun wl-display-roundtrip (display)
   "Request to synchronize the display and dispatch all events until synchronization is complete."
   (let ((callback (wl-display-sync display))
@@ -155,27 +186,6 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
           :do (wl-display-dispatch-event display))))
 
 ;; Event handling
-
-;; Stub out some classes for now -- it'll be redefined by WL-INCLUDE in
-;; protocols.lisp
-(defclass wl-callback-done-event (wl-event) ())
-(defclass wl-display-delete-id-event (wl-event) ())
-(defclass wl-display-error-event (wl-event) ())
-
-(defmethod handle-event ((listener roundtrip-listener) sender (event wl-callback-done-event))
-  (funcall (slot-value listener 'callback)))
-
-(defmethod dispatch-event (sender event)
-  "Inform all proxy's listeners of the event."
-  (dolist (listener (wl-proxy-listeners sender))
-    (handle-event listener sender event)))
-
-(defmethod dispatch-event :before (display (event wl-display-delete-id-event))
-  "Mark the object as deleted and remove it from the object table."
-  (remove-proxy display (wl-event-id event)))
-
-(defmethod dispatch-event :before (display (event wl-display-error-event))
-  (error "Wl-error event dispatched"))
 
 
 
@@ -268,7 +278,17 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
             ,obj))))
 
 (defmacro define-interface (name () &body options)
-  "Define a wl-proxy CLOS subclass an associated wl-event CLOS subclass, and assign the interface's name to the interface table, accessible via #'FIND-INTERFACE-NAMED."
+  "Define a wl-proxy CLOS subclass an associated wl-event CLOS subclass, and assign the interface's name to the interface table, accessible via #'FIND-INTERFACE-NAMED.
+
+NAME - The name of the interface class.
+
+OPTIONS:
+
+(:documentation DOCSTRING) - Docstring attached to the defined class.
+(:event-class CLASS-NAME) - Define a WL-EVENT subclass with the given class name
+(:skip-defclass BOOLEAN) - If true, do not define the interface class.
+                           Used by cl-autowrap when it reads wl_display.
+(:interface-name STRING) - The name of the interface as listed by the wl-registry on a wl-registry-global-event."
   (option-bind (documentation event-class skip-defclass interface-name) options
     `(progn
        ;; wl-proxy class
@@ -295,8 +315,19 @@ DISPLAY-NAME is an optional pathname designator pointing to the display socket. 
 
 (defmacro define-request ((name interface opcode) &body (arg-specifiers &rest options))
   "Define a function implementing the wl request.
+DEFINE-REQUEST currently only supports up to one :NEW-ID argument per request.
 
-DEFINE-REQUEST currently only supports up to one :NEW-ID argument per request."
+NAME - The name of the request function.
+INTERFACE - The name of the interface (as provided by define-interface) whose proxies send the request.
+OPCODE - The integer opcode value of the request.
+
+ARG-SPECIFIERS - Each specifier takes the lambda list (name &key type documentation).
+  TYPE - The Wayland type of the arg.
+  DOCUMENTATION - The summary of the arg.
+
+OPTIONS:
+
+(:DOCUMENTATION DOCSTRING) - Provided to the function as its docstring."
   (option-bind (documentation) options
     (a:with-gensyms (proxy buffer new-proxy)
       (let* ((new-proxy-interface
@@ -343,7 +374,20 @@ DEFINE-REQUEST currently only supports up to one :NEW-ID argument per request."
                 output-form))))))
 
 (defmacro define-event ((name interface opcode) &body (arg-specifiers &rest options))
-  "Define a wl-event class and a READ-EVENT method to support WL-DISPLAY-DISPATCH-EVENT."
+  "Define a class and a READ-EVENT method to support WL-DISPLAY-DISPATCH-EVENT.
+
+NAME - The name of the event class.
+INTERFACE - The name of the interface (as provided by define-interface) whose objects send the event.
+OPCODE - The integer opcode value of the event.
+
+ARG-SPECIFIERS - Each specifier takes the lambda list (name &key type documentation).
+  TYPE - The Wayland type of the arg.
+  DOCUMENTATION - The summary of the arg.
+
+OPTIONS:
+
+(:DOCUMENTATION DOCSTRING) - Provided to the event class as its docstring.
+(:EVENT-SUPERCLASSES CLASS-NAMES...) - When provided, the event class subclasses these given classes. Otherwise, it subclasses WL-EVENT."
   (option-bind (documentation event-superclasses) options
     (a:with-gensyms (proxy opcode-sym buffer)
       (let ((slot-specifiers
