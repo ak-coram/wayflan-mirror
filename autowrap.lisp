@@ -1,9 +1,9 @@
-;;; autowrap.lisp -- Protocol XML definition auto-wrapper
+;;; autowrap.lisp -- Wayland XML protocol definitions auto-wrapper
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter.
 ;;; All rights reserved.
 
-(in-package #:xyz.shunter.wayhack.autowrap)
+(in-package #:xyz.shunter.wayflan.autowrap)
 
 ;; DOM-walking utils and macros
 
@@ -156,7 +156,7 @@
   (let ((name (request-name interface dom-request)))
     (pushnew name (car syms))
 
-    `(define-request ,(list name interface opcode)
+    `(client:define-request ,(list name interface opcode)
        ,(map 'list (a:rcurry #'transform-arg syms)
              (args dom-request))
        ,@(a:when-let ((summary (summary* dom-request)))
@@ -167,7 +167,7 @@
 (defun transform-event (dom-event interface-event interface opcode syms)
   (let ((name (event-name interface dom-event)))
     (pushnew name (car syms))
-    `(define-event ,(list name interface opcode)
+    `(client:define-event ,(list name interface opcode)
        ,(map 'list (a:rcurry #'transform-arg syms)
              (args dom-event))
        (:event-superclasses ,interface-event)
@@ -176,7 +176,7 @@
 
 (defun transform-enum (dom-enum interface)
   (let ((name (enum-name interface dom-enum)))
-    `(define-enum ,name ()
+    `(client:define-enum ,name ()
        ,(map 'list
              (lambda (dom-entry)
                (list (a:make-keyword (lispify (name dom-entry)))
@@ -197,9 +197,9 @@
     (pushnew name (car syms))
     (pushnew event-name (car syms))
 
-    `((define-interface ,name ()
+    `((client:define-interface ,name ()
         ;; wl_display is specially defined, so don't stub this out.
-        ,@(when (string= (name dom-interface) "wl_display")
+        ,@(when (string= name 'client:wl-display)
             `((:skip-defclass t)))
         (:event-class ,event-name)
 

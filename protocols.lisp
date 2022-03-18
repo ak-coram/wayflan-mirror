@@ -1,4 +1,4 @@
-;;; protocols.lisp -- Stable protocols implementations
+;;; protocols.lisp -- Wayland stable protocols implementations
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter.
 ;;; All rights reserved.
@@ -8,30 +8,30 @@
 ;; The current stable protocol xml's are from wayland-protocols release 1.25.0
 ;; (Jan 2022)
 
-(cl:in-package #:xyz.shunter.wayhack.client)
+(cl:in-package #:xyz.shunter.wayflan.client)
 
-(xyz.shunter.wayhack.autowrap:wl-include
+(xyz.shunter.wayflan.autowrap:wl-include
   #.(cl:merge-pathnames #P"protocols/wayland.xml"
-                        (asdf:system-source-directory '#:wayhack))
+                        (asdf:system-source-directory '#:wayflan))
   :export t)
 
-(cl:in-package #:xyz.shunter.wayhack.client.presentation-time)
+(cl:in-package #:xyz.shunter.wayflan.client.presentation-time)
 
-(xyz.shunter.wayhack.autowrap:wl-include
+(xyz.shunter.wayflan.autowrap:wl-include
   #.(cl:merge-pathnames #P"protocols/presentation-time.xml"
-                        (asdf:system-source-directory '#:wayhack))
+                        (asdf:system-source-directory '#:wayflan))
   :export t)
 
-(cl:in-package #:xyz.shunter.wayhack.client.viewporter)
+(cl:in-package #:xyz.shunter.wayflan.client.viewporter)
 
-(xyz.shunter.wayhack.autowrap:wl-include
+(xyz.shunter.wayflan.autowrap:wl-include
   #.(cl:merge-pathnames #P"protocols/viewporter.xml"
-                        (asdf:system-source-directory '#:wayhack))
+                        (asdf:system-source-directory '#:wayflan))
   :export t)
 
-(cl:in-package #:xyz.shunter.wayhack.client.xdg-shell)
+(cl:in-package #:xyz.shunter.wayflan.client.xdg-shell)
 
-(xyz.shunter.wayhack.autowrap:wl-include
+(xyz.shunter.wayflan.autowrap:wl-include
   #.(cl:merge-pathnames #P"protocols/xdg-shell.xml"
-                        (asdf:system-source-directory '#:wayhack))
+                        (asdf:system-source-directory '#:wayflan))
   :export t)

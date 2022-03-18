@@ -3,7 +3,7 @@
 ;;; Copyright (c) 2022 Samuel Hunter.
 ;;; All rights reserved.
 
-(in-package #:xyz.shunter.wayhack.client)
+(in-package #:xyz.shunter.wayflan.client)
 
 
 

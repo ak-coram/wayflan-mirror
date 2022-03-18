@@ -3,7 +3,7 @@
 ;;; Copyright (c) 2022 Samuel Hunter.
 ;;; All rights reserved.
 
-(defpackage #:xyz.shunter.wayhack.wire
+(defpackage #:xyz.shunter.wayflan.wire
   (:use #:cl)
   (:local-nicknames (#:io #:fast-io)
                     (#:a #:alexandria))
@@ -25,7 +25,7 @@
            #:write-wl-array
            #:write-wl-message
            #:with-output-as-message)
-  (:documentation "Wayland primitive data communication.
+  (:documentation "Wayland wire format marshalling.
 
 Wayland is a protocol for a compositor to talk to its clients.
 The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
@@ -33,12 +33,12 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 
 The wayland-wire package defines utilities for communicating primitive data through a fast-io buffer connected to a Wayland UNIX socket stream."))
 
-(defpackage #:xyz.shunter.wayhack.client
-  (:nicknames #:wayhack-client)
+(defpackage #:xyz.shunter.wayflan.client
+  (:nicknames #:wayflan-client)
   (:use #:cl)
   (:local-nicknames (#:a #:alexandria)
                     (#:io #:fast-io)
-                    (#:wire #:xyz.shunter.wayhack.wire))
+                    (#:wire #:xyz.shunter.wayflan.wire))
   (:export #:wl-proxy
            #:wl-proxy-id
            #:wl-proxy-display
@@ -80,26 +80,22 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 
 This package defines the client's interpretation of various CLOS classes, the event protocol, define- macros to implement wayland protocols, and the core Wayland protocol."))
 
-(defpackage #:xyz.shunter.wayhack.autowrap
+(defpackage #:xyz.shunter.wayflan.autowrap
   (:use #:cl)
   (:local-nicknames (#:a #:alexandria)
+                    (#:client #:xyz.shunter.wayflan.client)
                     (#:dom #:org.shirakumo.plump.dom))
-  (:import-from #:xyz.shunter.wayhack.client
-                #:define-interface
-                #:define-enum
-                #:define-request
-                #:define-event
-                #:wl-display)
   (:export #:wl-include)
-  (:documentation "Wayland XML protocol autowrapper
+  (:documentation "Wayland XML protocol definitions auto-wrapper.
 
 Wayland is a protocol for a compositor to talk to its clients.
 The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
 The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
 
-This package defines WL-INCLUDE, a macro that transforms a Wayland protocol described in an XML file into wayhack definition forms."))
+This package defines WL-INCLUDE, a macro that transforms a Wayland protocol described in an XML file into wayflan definition forms."))
 
-(defpackage #:xyz.shunter.wayhack.client.presentation-time
+(defpackage #:xyz.shunter.wayflan.client.presentation-time
+  (:nicknames #:wayflan-client.presentatio-time)
   (:documentation "Wayland Presentation time protocol implementation.
 
 Wayland is a protocol for a compositor to talk to its clients.
@@ -108,7 +104,8 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 
 This package implements the stable Presentation time protocol."))
 
-(defpackage #:xyz.shunter.wayhack.client.viewporter
+(defpackage #:xyz.shunter.wayflan.client.viewporter
+  (:nicknames #:wayflan-client.viewporter)
   (:documentation "Wayland Viewporter protocol implementation.
 
 Wayland is a protocol for a compositor to talk to its clients.
@@ -117,7 +114,8 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 
 This package implements the stable Viewporter protocol."))
 
-(defpackage #:xyz.shunter.wayhack.client.xdg-shell
+(defpackage #:xyz.shunter.wayflan.client.xdg-shell
+  (:nicknames #:wayflan-client.xdg-shell)
   (:documentation "Wayland XDG shell protocol implementation.
 
 Wayland is a protocol for a compositor to talk to its clients.

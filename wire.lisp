@@ -1,9 +1,9 @@
-;;; wire.lisp -- Wayland primitive data communication
+;;; wire.lisp -- Wayland wire format marshalling
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter.
 ;;; All rights reserved.
 
-(in-package #:xyz.shunter.wayhack.wire)
+(in-package #:xyz.shunter.wayflan.wire)
 
 
 
@@ -181,5 +181,5 @@
   (a:once-only (output)
     `(let ((body (io:with-fast-output (,buffer) ,@body)))
        (io:with-fast-output (buffer ,output)
-         (write-wl-message ,sender-id ,opcode (print body) buffer))
+         (write-wl-message ,sender-id ,opcode body buffer))
        (force-output ,output))))
