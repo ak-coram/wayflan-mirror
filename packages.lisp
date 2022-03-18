@@ -39,34 +39,41 @@ The wayland-wire package defines utilities for communicating primitive data thro
   (:local-nicknames (#:a #:alexandria)
                     (#:io #:fast-io)
                     (#:wire #:xyz.shunter.wayflan.wire))
-  (:export #:wl-proxy
+  (:export #:find-interface-named
+
+           #:wl-proxy
            #:wl-proxy-id
            #:wl-proxy-display
            #:wl-proxy-listeners
+
+           #:wl-display
            #:wl-destroyed-proxy
+
            #:wl-event
            #:wl-event-sender
-           #:wl-event-listener
+
            #:wl-error
            #:wl-error-object
            #:wl-error-code
            #:wl-error-message
-           #:read-event
-           #:handle-event
-           #:decode-enum
-           #:encode-enum
 
-           #:find-interface-named
+           #:read-event
+           #:wl-event-listener
+           #:handle-event
+
            #:find-proxy
            #:make-proxy
            #:destroy-proxy
+
            #:display-pathname
-           #:wl-display
            #:wl-display-connect
            #:wl-display-disconnect
            #:wl-display-listen
            #:wl-display-dispatch-event
            #:wl-display-roundtrip
+
+           #:write-arg
+           #:read-arg
 
            #:define-interface
            #:define-enum
@@ -95,6 +102,7 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 This package defines WL-INCLUDE, a macro that transforms a Wayland protocol described in an XML file into wayflan definition forms."))
 
 (defpackage #:xyz.shunter.wayflan.client.presentation-time
+  (:use #:cl)
   (:nicknames #:wayflan-client.presentatio-time)
   (:documentation "Wayland Presentation time protocol implementation.
 
@@ -105,6 +113,7 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 This package implements the stable Presentation time protocol."))
 
 (defpackage #:xyz.shunter.wayflan.client.viewporter
+  (:use #:cl)
   (:nicknames #:wayflan-client.viewporter)
   (:documentation "Wayland Viewporter protocol implementation.
 
@@ -115,6 +124,7 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 This package implements the stable Viewporter protocol."))
 
 (defpackage #:xyz.shunter.wayflan.client.xdg-shell
+  (:use #:cl)
   (:nicknames #:wayflan-client.xdg-shell)
   (:documentation "Wayland XDG shell protocol implementation.
 

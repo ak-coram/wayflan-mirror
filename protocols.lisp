@@ -8,30 +8,30 @@
 ;; The current stable protocol xml's are from wayland-protocols release 1.25.0
 ;; (Jan 2022)
 
-(cl:in-package #:xyz.shunter.wayflan.client)
+(in-package #:xyz.shunter.wayflan.client)
 
 (xyz.shunter.wayflan.autowrap:wl-include
-  #.(cl:merge-pathnames #P"protocols/wayland.xml"
-                        (asdf:system-source-directory '#:wayflan))
+  #.(merge-pathnames #P"protocols/wayland.xml"
+                     (asdf:system-source-directory '#:wayflan))
   :export t)
 
-(cl:in-package #:xyz.shunter.wayflan.client.presentation-time)
+(in-package #:xyz.shunter.wayflan.client.presentation-time)
 
 (xyz.shunter.wayflan.autowrap:wl-include
-  #.(cl:merge-pathnames #P"protocols/presentation-time.xml"
-                        (asdf:system-source-directory '#:wayflan))
+  #.(merge-pathnames #P"protocols/presentation-time.xml"
+                     (asdf:system-source-directory '#:wayflan))
   :export t)
 
-(cl:in-package #:xyz.shunter.wayflan.client.viewporter)
+(in-package #:xyz.shunter.wayflan.client.viewporter)
 
 (xyz.shunter.wayflan.autowrap:wl-include
-  #.(cl:merge-pathnames #P"protocols/viewporter.xml"
-                        (asdf:system-source-directory '#:wayflan))
+  #.(merge-pathnames #P"protocols/viewporter.xml"
+                     (asdf:system-source-directory '#:wayflan))
   :export t)
 
-(cl:in-package #:xyz.shunter.wayflan.client.xdg-shell)
+(in-package #:xyz.shunter.wayflan.client.xdg-shell)
 
 (xyz.shunter.wayflan.autowrap:wl-include
-  #.(cl:merge-pathnames #P"protocols/xdg-shell.xml"
-                        (asdf:system-source-directory '#:wayflan))
+  #.(merge-pathnames #P"protocols/xdg-shell.xml"
+                     (asdf:system-source-directory '#:wayflan))
   :export t)
