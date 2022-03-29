@@ -130,14 +130,14 @@
 
 (defun write-wl-uint (n buffer)
   "Write a unsigned integer to a Wayland fast-io buffer."
-  #+little-endian (io:write32-le n buffer)
-  #+big-endian (io:write32-ge n buffer))
+  #+little-endian (io:writeu32-le n buffer)
+  #+big-endian (io:writeu32-ge n buffer))
 
 (defun write-wl-fixed (n buffer)
   "Write a signed 24.8 decimal number to a Wayland fast-io buffer."
   (multiple-value-bind (integer-part decimal-part) (floor n 1)
     (write-wl-uint (logior (ash integer-part 8)
-                           (mod (floor decimal-part #x1/100) #x100))
+                           (floor decimal-part #x1/100))
                    buffer)))
 
 (defun write-wl-string (string buffer)

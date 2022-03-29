@@ -21,4 +21,24 @@
                (:file #:wire)
                (:file #:client)
                (:file #:autowrap)
-               (:file #:protocols)))
+               (:file #:protocols))
+
+  :in-order-to ((test-op (test-op :wayflan/test))))
+
+(defsystem #:wayflan/test
+  :version "0.0.0"
+  :author "Samuel Hunter"
+  :license "Proprietary"
+
+  :description "Test sute for wayflan"
+
+  :depends-on (#:wayflan
+               #:alexandria
+               #:parachute)
+
+  :pathname #P"test/"
+  :serial nil
+  :components ((:file #:wire))
+
+  :perform (test-op (op c)
+             (uiop:symbol-call :parachute :test :xyz.shunter.wayflan.test)))
