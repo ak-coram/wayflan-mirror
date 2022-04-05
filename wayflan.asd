@@ -34,11 +34,14 @@
 
   :depends-on (#:wayflan
                #:alexandria
+               #:flexi-streams
                #:parachute)
 
   :pathname #P"test/"
   :serial nil
-  :components ((:file #:wire))
+  :components ((:file #:test)
+               (:file #:wire)
+               (:file #:client))
 
   :perform (test-op (op c)
              (uiop:symbol-call :parachute :test :xyz.shunter.wayflan.test)))

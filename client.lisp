@@ -363,7 +363,8 @@ OPTIONS:
        ;; wl-proxy class
        ,@(unless (first skip-defclass)
           `((defclass ,name (wl-proxy) ()
-              (:documentation ,@documentation))))
+              ,@(when documentation
+                  `((:documentation ,@documentation))))))
 
        ;; wl-event class
        ,@(when event-class
