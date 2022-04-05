@@ -11,6 +11,7 @@
   :description "Wayland implementation for clients (TODO: and servers)"
 
   :depends-on (#:alexandria
+               #:closer-mop
                #:fast-io
                #:iolib
                #:plump
@@ -21,6 +22,7 @@
                (:file #:wire)
                (:file #:client)
                (:file #:autowrap)
+               (:file #:wayland-protocol)
                (:file #:protocols))
 
   :in-order-to ((test-op (test-op :wayflan/test))))

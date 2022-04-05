@@ -88,9 +88,9 @@
                            #x74 #x68 #x69 #x6E
                            #x67 #x00 #x00 #x00)))))
            (display (client:wl-display-connect stream)))
-      (parachute:fail (client:wl-display-dispatch-event display)
-                      'client:wl-error
-                      "wl-display-error-event transforms into a wl-error"))
+      (p:fail (client:wl-display-dispatch-event display)
+              'client:wl-error
+              "wl-display-error-event transforms into a wl-error"))
 
     (let* ((stream (flexi-streams:make-in-memory-input-stream
                      (contents-to-octets
@@ -121,6 +121,7 @@
 
 (client:define-interface wl-foo ()
   (:event-class wl-foo-event)
+  (:version 1)
   (:interface-name "test_wl_foo"))
 
 (client:define-request (wl-foo-frobnicate-string wl-foo 11)
@@ -142,6 +143,7 @@
 
 (client:define-interface wl-bar ()
   (:event-class wl-bar-event)
+  (:version 1)
   (:interface-name "test_wl_bar"))
 
 (client:define-request (wl-bar-chortle-foo wl-bar 0)

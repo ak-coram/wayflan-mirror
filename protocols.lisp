@@ -8,13 +8,6 @@
 ;; The current stable protocol xml's are from wayland-protocols release 1.25.0
 ;; (Jan 2022)
 
-(in-package #:xyz.shunter.wayflan.client)
-
-(xyz.shunter.wayflan.autowrap:wl-include
-  #.(merge-pathnames #P"protocols/wayland.xml"
-                     (asdf:system-source-directory '#:wayflan))
-  :export t)
-
 (in-package #:xyz.shunter.wayflan.client.presentation-time)
 
 (xyz.shunter.wayflan.autowrap:wl-include

@@ -17,6 +17,44 @@
   "Return the interface linked to the given string NAME."
   (gethash name *interface-table*))
 
+(defun %set-interface-named (interface name)
+  (let ((prev-interface (gethash name *interface-table*)))
+    (when (and prev-interface (not (eql prev-interface interface)))
+      (warn "redefining Wayland interface named ~S" name))
+    (setf (gethash name *interface-table*) interface)))
+
+(defgeneric wl-interface-version (interface)
+  (:documentation "Return the interface's latest supported version"))
+
+(defmethod wl-interface-version ((interface symbol))
+  (wl-interface-version (find-class interface)))
+
+(defgeneric wl-interface-name (interface)
+  (:documentation "Return the interface's name as conveyed by the wl-registry"))
+
+(defmethod wl-interface-name ((interface symbol))
+  (wl-interface-name (find-class interface)))
+
+(defclass wl-interface (standard-class)
+  ((version :initarg :version :type (integer 0)
+            :documentation "The interface's latest supported version"
+            :reader wl-interface-version)
+   (interface-name :initarg :interface-name :type string
+                   :documentation "The interface's name as conveyed by the wl-registry"
+                   :reader wl-interface-name)))
+
+(defmethod closer-mop:validate-superclass ((class wl-interface)
+                                           (superclass standard-class))
+  t)
+
+(defmethod initialize-instance :after ((interface wl-interface) &key &allow-other-keys)
+  (when (slot-boundp interface 'interface-name)
+    (%set-interface-named interface (wl-interface-name interface))))
+
+(defmethod reinitialize-instance :after ((interface wl-interface) &key &allow-other-keys)
+  (when (slot-boundp interface 'interface-name)
+    (%set-interface-named interface (wl-interface-name interface))))
+
 (defclass wl-proxy ()
   ((object-id :type wire:wl-uint
               :reader wl-proxy-id
@@ -25,6 +63,8 @@
             :type wl-display
             :reader wl-proxy-display
             :accessor %wl-proxy-display)
+   (version :initarg :version
+            :reader wl-proxy-version)
    (listeners :initform ()
               :accessor wl-proxy-listeners))
   (:documentation "A protocol object on the client side"))
@@ -32,7 +72,10 @@
 (defclass wl-display (wl-proxy)
   ((%proxy-table :initform (make-hash-table) :reader %proxy-table)
    (%socket :initarg :socket :reader %wl-display-socket))
-  (:documentation "A connection to the compositor that acts as a proxy to the wl_display singleton object"))
+  (:documentation "A connection to the compositor that acts as a proxy to the wl_display singleton object")
+  (:version . 1)
+  (:interface-name . "wl_display")
+  (:metaclass wl-interface))
 
 (defclass wl-destroyed-proxy (wl-proxy)
   ()
@@ -78,8 +121,9 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
 
 (defmethod print-object ((object wl-proxy) stream)
   (print-unreadable-object (object stream :type t :identity t)
-    (format stream "~S ~S ~S (~D)"
+    (format stream "~S ~S ~S ~S ~S (~D)"
             :id (wl-proxy-id object)
+            :version (wl-proxy-version object)
             :listeners (length (wl-proxy-listeners object)))))
 
 ;; Proxy management
@@ -116,9 +160,12 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
       (unless (gethash (1+ i) proxy-table)
         (return (1+ i))))))
 
-(defun make-proxy (class display &optional object-id)
+(defun make-proxy (class display &key object-id version)
   "Make a new proxy. If OBJECT-ID is provided, it's assumed it came from the server. Otherwise, it will allocate a new object-id from the client side."
-  (let ((new-proxy (make-instance class :display display)))
+  (let ((new-proxy
+          (make-instance class
+                         :display display
+                         :version (or version (wl-interface-version class)))))
     (set-proxy display (or object-id (%next-proxy-id display)) new-proxy)))
 
 (defmethod initialize-instance :after ((display wl-display)
@@ -310,41 +357,50 @@ destructuring lambda-list bound under the case's body."
          `(wire:read-wl-uint ,buffer)))
     (:fixed `(wire:read-wl-fixed ,buffer))
     (:string `(wire:read-wl-string ,buffer))
-    (:object `(find-proxy (wl-proxy-display ,sender)
-                          (wire:read-wl-uint ,buffer)))
+    (:object
+      ;; TODO When the interface is given, check that the server has provided
+      ;; the correct type.
+      `(find-proxy (wl-proxy-display ,sender)
+                   (wire:read-wl-uint ,buffer)))
     ((:new-id &optional interface)
      (if interface
          `(make-proxy ',interface
                       (wl-proxy-display ,sender)
-                      (wire:read-wl-uint ,buffer))
-         `(error "Don't know how to read an untyped :NEW-ID yet."))
-     `(make-proxy ',interface
-                  (wl-proxy-display ,sender)
-                  (wire:read-wl-uint ,buffer)))
+                      :version (wire:read-wl-uint ,buffer))
+         `(error "Don't know how to read an untyped :NEW-ID yet.")))
     (:array `(wire:read-wl-array ,buffer))
     (:fd `(iolib:receive-file-descriptor
             (%wl-display-socket (wl-proxy-display ,sender))))))
 
-(defmacro write-arg (obj type sender buffer)
-  "Write an object to the Wayland buffer depending on the given TYPE."
+(defmacro write-arg (place type sender buffer)
+  "Write an object stored in PLACE to the Wayland buffer depending on the given TYPE."
   (%wltype-ecase type
-    (:int `(wire:write-wl-int ,obj ,buffer))
+    (:int `(wire:write-wl-int ,place ,buffer))
     ((:uint &optional enum)
      (if enum
          `(error "Don't know how to write a uint<enum> yet.")
-         `(wire:write-wl-uint ,obj ,buffer)))
-    (:fixed `(wire:write-wl-fixed ,obj ,buffer))
-    (:string `(wire:write-wl-string ,obj ,buffer))
-    (:object `(wire:write-wl-uint (wl-proxy-id ,obj) ,buffer))
+         `(wire:write-wl-uint ,place ,buffer)))
+    (:fixed `(wire:write-wl-fixed ,place ,buffer))
+    (:string `(wire:write-wl-string ,place ,buffer))
+    ((:object &optional interface)
+     `(wire:write-wl-uint
+        ,(if interface
+             `(progn (check-type ,place ,interface)
+                     (wl-proxy-id ,place))
+             `(wl-proxy-id ,place))
+        ,buffer))
     ((:new-id &optional interface)
      (if interface
-         `(wire:write-wl-uint (wl-proxy-id ,obj) ,buffer)
-         `(error "Don't know how to write an untyped :NEW-ID yet"))
-     `(wire:write-wl-uint (wl-proxy-id ,obj) ,buffer))
-    (:array `(wire:write-wl-array ,obj ,buffer))
+         `(wire:write-wl-uint (wl-proxy-id ,place) ,buffer)
+         `(progn
+            (wire:write-wl-string (wl-interface-name (class-of ,place))
+                                  ,buffer)
+            (wire:write-wl-uint (wl-proxy-version ,place) ,buffer)
+            (wire:write-wl-uint (wl-proxy-id ,place) ,buffer))))
+    (:array `(wire:write-wl-array ,place ,buffer))
     (:fd `(iolib:send-file-descriptor
             (%wl-display-socket (wl-proxy-display ,sender))
-            ,obj))))
+            ,place))))
 
 (defmacro define-interface (name () &body options)
   "Define a wl-proxy CLOS subclass an associated wl-event CLOS subclass, and assign the interface's name to the interface table, accessible via #'FIND-INTERFACE-NAMED.
@@ -353,29 +409,30 @@ NAME - The name of the interface class.
 
 OPTIONS:
 
+(:version VERSION) - Latest supported version of the interface.
 (:documentation DOCSTRING) - Docstring attached to the defined class.
 (:event-class CLASS-NAME) - Define a WL-EVENT subclass with the given class name
 (:skip-defclass BOOLEAN) - If true, do not define the interface class.
                            Used by cl-autowrap when it reads wl_display.
 (:interface-name STRING) - The name of the interface as listed by the wl-registry on a wl-registry-global-event."
-  (%option-bind (documentation event-class skip-defclass interface-name) options
+  (%option-bind (version documentation event-class skip-defclass interface-name) options
     `(progn
        ;; wl-proxy class
        ,@(unless (first skip-defclass)
-          `((defclass ,name (wl-proxy) ()
-              ,@(when documentation
-                  `((:documentation ,@documentation))))))
+           `((defclass ,name (wl-proxy) ()
+               ,@(when version
+                   `((:version . ,(first version))))
+               ,@(when interface-name
+                   `((:interface-name . ,(first interface-name))))
+               ,@(when documentation
+                   `((:documentation ,@documentation)))
+               (:metaclass wl-interface))))
 
        ;; wl-event class
        ,@(when event-class
            `((defclass ,(first event-class) (wl-event) ()
                (:documentation ,(format nil "Event sent from a ~A proxy."
                                         name)))))
-
-       ;; Associate wl-proxy class w/ interface name
-       ,@(when interface-name
-           `((setf (gethash ,(first interface-name) *interface-table*)
-                  (find-class ',name))))
 
        ',name)))
 
@@ -399,7 +456,7 @@ OPTIONS:
 
 (:DOCUMENTATION DOCSTRING) - Provided to the function as its docstring."
   (%option-bind (documentation type) options
-    (a:with-gensyms (proxy buffer new-proxy)
+    (a:with-gensyms (buffer)
       (let* ((new-proxy-interface
                ;; If a new proxy is being created, in this request, the form to
                ;; evaluate to the proxy's interface. If the type is fixed, it's
@@ -411,38 +468,41 @@ OPTIONS:
                      ((:new-id &optional type-interface)
                       (return (if type-interface
                                   `(quote ,type-interface)
-                                  (gensym "INTERFACE"))))))))
+                                  'new-interface)))))))
              (lambda-list-tail
                (mapcan (lambda (specifier)
                          (%specifier-bind (name &key type &allow-other-keys) specifier
                            (%wltype-case type
                              ((:new-id &optional type-interface)
                               (unless type-interface
-                                (list new-proxy-interface)))
+                                (list new-proxy-interface 'version)))
                              (t (list name)))))
                        arg-specifiers))
              (output-body
-               `((wire:with-output-as-message (,buffer (wl-proxy-id ,proxy)
+               `((wire:with-output-as-message (,buffer (wl-proxy-id ,interface)
                                                        ,opcode
-                                                       (%wl-display-socket (wl-proxy-display ,proxy)))
+                                                       (%wl-display-socket (wl-proxy-display ,interface)))
                    ,@(mapcar (lambda (specifier)
                                (%specifier-bind (name &key type &allow-other-keys) specifier
                                  `(write-arg ,(%wltype-case type
-                                                (:new-id new-proxy)
+                                                (:new-id 'new-proxy)
                                                 (t name))
                                              ,type
-                                             ,proxy
+                                             ,interface
                                              ,buffer)))
                              arg-specifiers))
                  ,@(when (eq (first type) :destructor)
-                     `((destroy-proxy ,proxy))))))
-        `(defun ,name ,(list* proxy lambda-list-tail)
+                     `((destroy-proxy ,interface))))))
+        `(defun ,name ,(list* interface lambda-list-tail)
            ,@documentation
-           (check-type ,proxy ,interface)
+           (check-type ,interface ,interface)
            ,(if new-proxy-interface
-                `(let ((,new-proxy (make-proxy ,new-proxy-interface (wl-proxy-display ,proxy))))
+                `(let ((new-proxy (make-proxy ,new-proxy-interface
+                                              (wl-proxy-display ,interface)
+                                              ,@(when (member 'version lambda-list-tail)
+                                                  '(:version version)))))
                    ,@output-body
-                   ,new-proxy)
+                   new-proxy)
                 (if (> 1 (length output-body))
                     `(progn ,@output-body)
                     (first output-body))))))))

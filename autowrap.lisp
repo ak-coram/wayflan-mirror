@@ -63,6 +63,7 @@
 (define-attribute-reader name)
 (define-attribute-reader summary)
 (define-attribute-reader bitfield)
+(define-attribute-reader version)
 
 (defun description (elm)
   (string-trim
@@ -190,6 +191,7 @@
 
 (defun transform-interface (dom-interface syms)
   (let ((name (interface-name dom-interface))
+        (version (parse-integer (version dom-interface)))
         (event-name (interface-event-name dom-interface))
         (requests (requests dom-interface))
         (events (events dom-interface))
@@ -201,6 +203,7 @@
         ;; wl_display is specially defined, so don't stub this out.
         ,@(when (string= name 'client:wl-display)
             `((:skip-defclass t)))
+        (:version ,version)
         (:event-class ,event-name)
 
         (:interface-name ,(name dom-interface))
@@ -225,8 +228,20 @@
                 events)))))
 
 (defun transform-protocol (dom-protocol syms)
-  (mapcan (a:rcurry #'transform-interface syms)
-          (coerce (interfaces dom-protocol) 'list)))
+  (let* ((interface-forms (mapcar (a:rcurry #'transform-interface syms)
+                                  (coerce (interfaces dom-protocol) 'list)))
+         ;; Each transformed interface starts with a single DEFINE-INTERFACE
+         ;; form, followed by all other DEFINE-X forms.
+         (define-interface-forms (mapcar #'first interface-forms))
+         (other-define-forms (mapcan #'rest interface-forms)))
+    ;; Transform all DOM interface definitions into define-X lisp forms, and
+    ;; then rearrange them such that all DEFINE-INTERFACE forms are on top
+    ;; (so that all other DEFINE-* forms has access to all classes).
+
+    ;; If I don't do this, then the compiler will warn about type-checking for
+    ;; types that aren't yet defined.
+    (append define-interface-forms
+            other-define-forms)))
 
 (defmacro wl-include (input &key export)
   "Define the collection of interfaces, enums, requests, and events described by INPUT, for use by a Wayland client.

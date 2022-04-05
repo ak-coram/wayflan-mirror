@@ -41,9 +41,13 @@ The wayland-wire package defines utilities for communicating primitive data thro
                     (#:wire #:xyz.shunter.wayflan.wire))
   (:export #:find-interface-named
 
+           #:wl-interface-version
+           #:wl-interface-name
+
            #:wl-proxy
            #:wl-proxy-id
            #:wl-proxy-display
+           #:wl-proxy-version
            #:wl-proxy-listeners
 
            #:wl-display
@@ -102,18 +106,18 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 This package defines WL-INCLUDE, a macro that transforms a Wayland protocol described in an XML file into wayflan definition forms."))
 
 (defpackage #:xyz.shunter.wayflan.client.presentation-time
-  (:use #:cl)
-  (:nicknames #:wayflan-client.presentatio-time)
+  (:use #:cl #:xyz.shunter.wayflan.client)
+  (:nicknames #:wayflan-client.presentation-time)
   (:documentation "Wayland Presentation time protocol implementation.
 
 Wayland is a protocol for a compositor to talk to its clients.
 The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
 The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
 
-This package implements the stable Presentation time protocol."))
+This package implements the stable Presentation Time protocol."))
 
 (defpackage #:xyz.shunter.wayflan.client.viewporter
-  (:use #:cl)
+  (:use #:cl #:xyz.shunter.wayflan.client)
   (:nicknames #:wayflan-client.viewporter)
   (:documentation "Wayland Viewporter protocol implementation.
 
@@ -124,7 +128,7 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 This package implements the stable Viewporter protocol."))
 
 (defpackage #:xyz.shunter.wayflan.client.xdg-shell
-  (:use #:cl)
+  (:use #:cl #:xyz.shunter.wayflan.client)
   (:nicknames #:wayflan-client.xdg-shell)
   (:documentation "Wayland XDG shell protocol implementation.
 
