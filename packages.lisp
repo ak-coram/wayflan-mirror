@@ -33,6 +33,10 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 
 The wayland-wire package defines utilities for communicating primitive data through a fast-io buffer connected to a Wayland UNIX socket stream."))
 
+(defpackage #:xyz.shunter.wayflan.socket
+  (:use #:cl)
+  (:local-nicknames (#:a #:alexandria)))
+
 (defpackage #:xyz.shunter.wayflan.client
   (:nicknames #:wayflan-client)
   (:use #:cl)

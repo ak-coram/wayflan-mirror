@@ -182,4 +182,4 @@
     `(let ((body (io:with-fast-output (,buffer) ,@body)))
        (io:with-fast-output (buffer ,output)
          (write-wl-message ,sender-id ,opcode body buffer))
-       (force-output ,output))))
+       (finish-output ,output))))

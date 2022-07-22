@@ -9,6 +9,8 @@
 
 (declaim (optimize debug))
 
+;; Wayland Interface
+
 (defparameter *interface-table*
   (make-hash-table :test 'equal)
   "Maps all Wayland interface names to their proxy class")
@@ -55,18 +57,22 @@
   (when (slot-boundp interface 'interface-name)
     (%set-interface-named interface (wl-interface-name interface))))
 
+;; Wayland Proxy
+
 (defclass wl-proxy ()
   ((object-id :type wire:wl-uint
               :reader wl-proxy-id
               :accessor %wl-proxy-id)
-   (display :initarg :display
-            :type wl-display
-            :reader wl-proxy-display
-            :accessor %wl-proxy-display)
-   (version :initarg :version
-            :reader wl-proxy-version)
-   (listeners :initform ()
-              :accessor wl-proxy-listeners))
+   (%display :initarg :display
+             :type wl-display
+             :reader wl-proxy-display
+             :accessor %wl-proxy-display)
+   (%version :initarg :version
+             :reader wl-proxy-version)
+   (%listeners :initform ()
+               :accessor wl-proxy-listeners)
+   (%deletedp :initform nil
+              :reader deletedp))
   (:documentation "A protocol object on the client side"))
 
 (defclass wl-display (wl-proxy)
@@ -162,11 +168,14 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
 
 (defun make-proxy (class display &key object-id version)
   "Make a new proxy. If OBJECT-ID is provided, it's assumed it came from the server. Otherwise, it will allocate a new object-id from the client side."
+  ;; TODO use PARENT over DISPLAY, to change default version to
+  ;; (min (wl-interface-version class) (wl-proxy-version parent))
   (let ((new-proxy
           (make-instance class
                          :display display
                          :version (or version (wl-interface-version class)))))
-    (set-proxy display (or object-id (%next-proxy-id display)) new-proxy)))
+    (set-proxy display (or object-id (%next-proxy-id display)) new-proxy)
+    new-proxy))
 
 (defmethod initialize-instance :after ((display wl-display)
                                        &key &allow-other-keys)
@@ -207,11 +216,11 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
          :message (wl-event-message event)))
 
 (defclass roundtrip-listener (wl-event-listener)
-  ((callback :initarg :callback))
+  ((%callback :initarg :callback))
   (:documentation "Used by WL-DISPLAY-ROUNDTRIP to funcall an assigned closure."))
 
 (defmethod handle-event ((listener roundtrip-listener) sender (event wl-callback-done-event))
-  (funcall (slot-value listener 'callback)))
+  (funcall (slot-value listener '%callback)))
 
 ;; Display management
 
@@ -247,9 +256,11 @@ underlying stream when WL-DISPLAY-DISCONNECT is called."
              (sockets:make-address
                (uiop:unix-namestring pathname)))))
     (make-instance
-      'wl-display :socket (if (streamp display-name)
-                            display-name
-                            (connect-socket (display-pathname display-name))))))
+      'wl-display
+      :socket (if (streamp display-name)
+                display-name
+                (connect-socket (display-pathname display-name)))
+      :version 1)))
 
 (defgeneric wl-display-disconnect (display)
   (:documentation "Close the display's underlying stream and remove all proxies."))
@@ -270,11 +281,15 @@ underlying stream when WL-DISPLAY-DISCONNECT is called."
 (defun wl-display-dispatch-event (display)
   "Read and dispatch the display's next event."
   (let (sender event)
-    (wire:with-input-from-message (buffer sender-id opcode
-                                          nil (%wl-display-socket display))
-      (setf sender (find-proxy display sender-id)
-            event (read-event sender opcode buffer))
-      (dispatch-event sender event))))
+    (do ((events 0 (1+ events)))
+        ((and (plusp events)
+              (not (wl-display-listen display)))
+         events)
+        (wire:with-input-from-message (buffer sender-id opcode
+                                              nil (%wl-display-socket display))
+          (setf sender (find-proxy display sender-id)
+                event (read-event sender opcode buffer))
+          (dispatch-event sender event)))))
 
 (defun wl-display-roundtrip (display)
   "Block and dispatch events until all requests sent up to this point have been finalized."
@@ -351,10 +366,7 @@ destructuring lambda-list bound under the case's body."
   "Read an object from the Wayland buffer depending on the given TYPE."
   (%wltype-ecase type
     (:int `(wire:read-wl-int ,buffer))
-    ((:uint &optional enum)
-     (if enum
-         `(error "Don't know how to read a uint<enum> yet.")
-         `(wire:read-wl-uint ,buffer)))
+    (:uint `(wire:read-wl-uint ,buffer))
     (:fixed `(wire:read-wl-fixed ,buffer))
     (:string `(wire:read-wl-string ,buffer))
     (:object
@@ -376,10 +388,7 @@ destructuring lambda-list bound under the case's body."
   "Write an object stored in PLACE to the Wayland buffer depending on the given TYPE."
   (%wltype-ecase type
     (:int `(wire:write-wl-int ,place ,buffer))
-    ((:uint &optional enum)
-     (if enum
-         `(error "Don't know how to write a uint<enum> yet.")
-         `(wire:write-wl-uint ,place ,buffer)))
+    (:uint `(wire:write-wl-uint ,place ,buffer))
     (:fixed `(wire:write-wl-fixed ,place ,buffer))
     (:string `(wire:write-wl-string ,place ,buffer))
     ((:object &optional interface)
@@ -438,7 +447,12 @@ OPTIONS:
 
 (defmacro define-enum (name () &body (entry-specifiers &rest options))
   "Define a parameter that associates each entry keyword with an index in the array."
-  (declare (ignore name entry-specifiers options)))
+  (declare (ignore name options))
+  `(progn
+     ,@(mapcar (lambda (specifier)
+                 (destructuring-bind (variable value &key documentation) specifier
+                   `(defparameter ,variable ,value ,documentation)))
+               entry-specifiers)))
 
 (defmacro define-request ((name interface opcode) &body (arg-specifiers &rest options))
   "Define a function implementing the wl request.
@@ -496,16 +510,18 @@ OPTIONS:
         `(defun ,name ,(list* interface lambda-list-tail)
            ,@documentation
            (check-type ,interface ,interface)
-           ,(if new-proxy-interface
+           ,(cond
+              (new-proxy-interface
                 `(let ((new-proxy (make-proxy ,new-proxy-interface
                                               (wl-proxy-display ,interface)
                                               ,@(when (member 'version lambda-list-tail)
                                                   '(:version version)))))
                    ,@output-body
-                   new-proxy)
-                (if (> 1 (length output-body))
-                    `(progn ,@output-body)
-                    (first output-body))))))))
+                   new-proxy))
+              ((> (length output-body) 1)
+               `(progn ,@output-body))
+              (t
+               (first output-body))))))))
 
 (defmacro define-event ((name interface opcode) &body (arg-specifiers &rest options))
   "Define a class and a READ-EVENT method to support WL-DISPLAY-DISPATCH-EVENT.

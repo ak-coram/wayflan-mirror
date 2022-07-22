@@ -13,9 +13,12 @@
   :depends-on (#:alexandria
                #:closer-mop
                #:fast-io
-               #:iolib
                #:plump
-               #:trivial-features)
+               #:trivial-features
+
+               #:cffi
+
+               #:iolib)
 
   :serial t
   :components ((:file #:packages)

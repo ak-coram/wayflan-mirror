@@ -118,12 +118,17 @@
                      '#:event)))
 
 (defun enum-name (interface-name dom-enum)
-  (intern (format nil "~A.~A"
-                  (lispify interface-name)
-                  (lispify (name dom-enum)))))
+  (intern (hyphenize interface-name (name dom-enum))))
 
-(defun arg-name (dom-arg)
+(defun enum-entry-name (interface-name dom-enum dom-entry)
+  (intern (format nil "+~A+"
+                  (hyphenize interface-name (name dom-enum) (name dom-entry)))))
+
+(defun event-arg-name (dom-arg)
   (intern (hyphenize '#:wl-event (name dom-arg))))
+
+(defun request-arg-name (dom-arg)
+  (intern (lispify (name dom-arg))))
 
 (defun arg-type (dom-arg)
   "Return the lispified type of the DOM arg element."
@@ -144,21 +149,24 @@
     ("array" :array)
     ("fd" :fd)))
 
-(defun transform-arg (dom-arg syms)
-  (let ((name (arg-name dom-arg)))
+(defun transform-arg (dom-arg syms &key event-p)
+  (let ((name (if event-p
+                  (event-arg-name dom-arg)
+                  (request-arg-name dom-arg))))
     (pushnew name (car syms))
-    (list* name
-           :initarg (a:make-keyword (lispify (name dom-arg)))
-           :type (arg-type dom-arg)
-           (a:when-let ((summary (summary* dom-arg)))
-             (list :documentation summary)))))
+    `(,name
+       :type ,(arg-type dom-arg)
+       ,@(when event-p
+           `(:initarg ,(a:make-keyword (lispify (name dom-arg)))))
+       ,@(a:when-let ((summary (summary* dom-arg)))
+           `(:documentation ,summary)))))
 
 (defun transform-request (dom-request interface opcode syms)
   (let ((name (request-name interface dom-request)))
     (pushnew name (car syms))
 
     `(client:define-request ,(list name interface opcode)
-       ,(map 'list (a:rcurry #'transform-arg syms)
+       ,(map 'list (a:rcurry #'transform-arg syms :event-p nil)
              (args dom-request))
        ,@(a:when-let ((summary (summary* dom-request)))
            `((:documentation ,summary)))
@@ -169,20 +177,22 @@
   (let ((name (event-name interface dom-event)))
     (pushnew name (car syms))
     `(client:define-event ,(list name interface opcode)
-       ,(map 'list (a:rcurry #'transform-arg syms)
+       ,(map 'list (a:rcurry #'transform-arg syms :event-p t)
              (args dom-event))
        (:event-superclasses ,interface-event)
        ,@(a:when-let ((summary (summary* dom-event)))
            `((:documentation ,summary))))))
 
-(defun transform-enum (dom-enum interface)
+(defun transform-enum (dom-enum interface syms)
   (let ((name (enum-name interface dom-enum)))
     `(client:define-enum ,name ()
        ,(map 'list
              (lambda (dom-entry)
-               (list (a:make-keyword (lispify (name dom-entry)))
-                     (value dom-entry)
-                     :documentation (summary dom-entry)))
+               (let ((entry-name (enum-entry-name interface dom-enum dom-entry)))
+                 (pushnew entry-name (car syms))
+                 (list entry-name
+                       (value dom-entry)
+                       :documentation (summary dom-entry))))
              (entries dom-enum))
        ,@(a:when-let ((summary (summary* dom-enum)))
            `((:documentation ,summary)))
@@ -212,7 +222,7 @@
 
        ,@(map 'list
               (lambda (dom-enum)
-                (transform-enum dom-enum name))
+                (transform-enum dom-enum name syms))
               enums)
 
        ,@(let ((opcode -1))
