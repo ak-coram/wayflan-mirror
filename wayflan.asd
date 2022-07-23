@@ -3,6 +3,27 @@
 ;;; Copyright (c) 2022 Samuel Hunter.
 ;;; All rights reserved.
 
+(defsystem #:wayflan/sockets
+  :version "0.0.0"
+  :author "Samuel Hunter"
+  :license "Proprietary"
+
+  :description "Local socket interface for Wayland connections"
+
+  :depends-on (#:alexandria
+               #:cffi
+               #:cl-autowrap
+               #:trivial-gray-streams)
+  :pathname #P"sockets/"
+  :serial t
+  :components ((:module #:spec
+                :pathname "spec"
+                :components ((:static-file "socket.h")))
+               (:file "package")
+               (:file "ffi")
+               (:file "conditions")
+               (:file "sockets")))
+
 (defsystem #:wayflan
   :version "0.0.0"
   :author "Samuel Hunter"
@@ -15,10 +36,7 @@
                #:fast-io
                #:plump
                #:trivial-features
-
-               #:cffi
-
-               #:iolib)
+               #:wayflan/sockets)
 
   :serial t
   :components ((:file #:packages)

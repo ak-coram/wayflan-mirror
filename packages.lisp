@@ -42,7 +42,8 @@ The wayland-wire package defines utilities for communicating primitive data thro
   (:use #:cl)
   (:local-nicknames (#:a #:alexandria)
                     (#:io #:fast-io)
-                    (#:wire #:xyz.shunter.wayflan.wire))
+                    (#:wire #:xyz.shunter.wayflan.wire)
+                    (#:sock #:xyz.shunter.wayflan.sockets))
   (:export #:find-interface-named
 
            #:wl-interface-version

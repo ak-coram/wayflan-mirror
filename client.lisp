@@ -250,11 +250,8 @@ Whether or not WL-DISPLAY-CONNECT opened a stream, it will close the display's
 underlying stream when WL-DISPLAY-DISCONNECT is called."
   (flet ((connect-socket (pathname)
            "Connect to the Unix socket living in PATHNAME."
-           (sockets:connect
-             (sockets:make-socket :address-family :local
-                                  :type :stream)
-             (sockets:make-address
-               (uiop:unix-namestring pathname)))))
+           (sock:connect (sock:make-socket)
+                         (uiop:unix-namestring pathname))))
     (make-instance
       'wl-display
       :socket (if (streamp display-name)
@@ -381,8 +378,7 @@ destructuring lambda-list bound under the case's body."
                       :version (wire:read-wl-uint ,buffer))
          `(error "Don't know how to read an untyped :NEW-ID yet.")))
     (:array `(wire:read-wl-array ,buffer))
-    (:fd `(iolib:receive-file-descriptor
-            (%wl-display-socket (wl-proxy-display ,sender))))))
+    (:fd `(error "Don't know how to read fd's yet."))))
 
 (defmacro write-arg (place type sender buffer)
   "Write an object stored in PLACE to the Wayland buffer depending on the given TYPE."
@@ -407,9 +403,7 @@ destructuring lambda-list bound under the case's body."
             (wire:write-wl-uint (wl-proxy-version ,place) ,buffer)
             (wire:write-wl-uint (wl-proxy-id ,place) ,buffer))))
     (:array `(wire:write-wl-array ,place ,buffer))
-    (:fd `(iolib:send-file-descriptor
-            (%wl-display-socket (wl-proxy-display ,sender))
-            ,place))))
+    (:fd `(error "Don't know how to read fd's yet."))))
 
 (defmacro define-interface (name () &body options)
   "Define a wl-proxy CLOS subclass an associated wl-event CLOS subclass, and assign the interface's name to the interface table, accessible via #'FIND-INTERFACE-NAMED.
