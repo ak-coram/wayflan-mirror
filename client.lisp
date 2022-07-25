@@ -403,7 +403,9 @@ destructuring lambda-list bound under the case's body."
             (wire:write-wl-uint (wl-proxy-version ,place) ,buffer)
             (wire:write-wl-uint (wl-proxy-id ,place) ,buffer))))
     (:array `(wire:write-wl-array ,place ,buffer))
-    (:fd `(error "Don't know how to read fd's yet."))))
+    (:fd `(sock:write-fd
+            (%wl-display-socket (wl-proxy-display ,sender))
+            ,place))))
 
 (defmacro define-interface (name () &body options)
   "Define a wl-proxy CLOS subclass an associated wl-event CLOS subclass, and assign the interface's name to the interface table, accessible via #'FIND-INTERFACE-NAMED.

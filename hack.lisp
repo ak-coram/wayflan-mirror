@@ -1,12 +1,12 @@
 (require :wayflan)
 (require :posix-shm)
-(defpackage #:xyz.shunter.wayflan.hack
+(defpackage #:hack
   (:use #:cl #:wayflan-client)
   (:local-nicknames (#:a #:alexandria)
                     (#:shm #:posix-shm)
                     (#:xdg #:wayflan-client.xdg-shell)))
 
-(in-package #:xyz.shunter.wayflan.hack)
+(in-package #:hack)
 
 
 
@@ -17,6 +17,9 @@ Executes the body with DISPLAY bound to a freshly connected display."
      (unwind-protect
        (progn ,@body)
        (wl-display-disconnect ,display))))
+
+(define-condition close-app ()
+  ())
 
 (defclass superapp (wl-event-listener)
   (;; Display Globals
@@ -55,7 +58,7 @@ Executes the body with DISPLAY bound to a freshly connected display."
         (dotimes (y height)
           (dotimes (x width)
             (setf (cffi:mem-aref pool-data :uint32 (+ (* y width) x))
-                  (if (< (+ x (- y (mod y 8))) 8)
+                  (if (< (mod (+ x (* (floor y 8) 8)) 16) 8)
                       #xff666666
                       #xffeeeeee))))
 
@@ -72,13 +75,15 @@ Executes the body with DISPLAY bound to a freshly connected display."
 (defmethod handle-event ((app superapp) xdg-wm-base (event xdg:xdg-wm-base-ping-event))
   (xdg:xdg-wm-base-pong xdg-wm-base (xdg:wl-event-serial event)))
 
+(defmethod handle-event ((app superapp) sender (event xdg:xdg-toplevel-close-event))
+  (signal 'close-app))
+
 (defmethod handle-event :before ((app superapp) sender event)
   ;; Report all events to output for debugging.
   (unless (typep event 'wl-registry-global-event)
     (format t "Handling ~A for ~S~%" (class-of event) sender)))
 
 (defmethod handle-event ((app superapp) registry (event wl-registry-global-event))
-  (declare (optimize debug))
   (with-accessors ((name wl-event-name)
                    (interface wl-event-interface)
                    (version wl-event-version)) event
@@ -96,23 +101,18 @@ Executes the body with DISPLAY bound to a freshly connected display."
           (setf xdg-wm-base (wl-registry-bind registry name 'xdg:xdg-wm-base 1))
           (push app (wl-proxy-listeners xdg-wm-base)))))))
 
-(defmethod handle-event ((app superapp) display (event wl-display-delete-id-event))
-  ;; Print-debugging
-  (format t "Object # ~D deleted~%" (wl-event-id event)))
-
 (defmethod handle-event ((app superapp) display event)
   ;; Ignore all un-handled events
   (declare (ignore app display event)))
 
 (defun run ()
   (declare (optimize debug))
-  (with-open-display (display "wayland-2")
+  (with-open-display (display)
     (let ((app (make-instance 'superapp :display display)))
       (with-slots (wl-registry wl-compositor wl-surface xdg-surface
                                xdg-wm-base xdg-toplevel) app
         (setf wl-registry (wl-display-get-registry display))
         (push app (wl-proxy-listeners wl-registry))
-        ;; (push app (wl-proxy-listeners display))
         (wl-display-roundtrip display)
 
         (setf wl-surface (wl-compositor-create-surface wl-compositor)
@@ -124,5 +124,5 @@ Executes the body with DISPLAY bound to a freshly connected display."
         (xdg:xdg-toplevel-set-title xdg-toplevel "Example client")
         (wl-surface-commit wl-surface)
 
-        (loop (print "Dispatching event...")
-              (wl-display-dispatch-event display))))))
+        (handler-case (loop (wl-display-dispatch-event display))
+          (close-app ()))))))

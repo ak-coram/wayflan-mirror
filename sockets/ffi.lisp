@@ -27,9 +27,8 @@
                                           "^AF_UNIX$"
                                           "^SOCK_STREAM$"
                                           "^MSG_"
-
-                                          ;; Macros
-                                          "^CMSG_"
+                                          "^SOL_SOCKET$"
+                                          "^SCM_RIGHTS$"
 
                                           ;; Syscalls
                                           "^socket$"

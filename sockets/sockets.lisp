@@ -7,7 +7,26 @@
 
 
 
+(defmacro when-debug (&body body)
+  (declare (ignore body)))
+
+
+
 ;; Ring Buffers
+
+;; This magic number comes from libwayland. TODO: Figure out why.
+;; I have an unconfirmed suspicion that this has something to do with the fact
+;; that CMSG_LEN(sizeof(int) * 28) is exactly 128 bytes.
+(defconstant +max-fds-out+ 28)
+
+;; Both sizes must be powers of 2, so that LOGAND can be used to mask the
+;; length of the buffer.
+(defconstant +iobuf-size+ (* 4 4096)
+             "Number of octets to store in a ring buffer")
+(defconstant +fdbuf-size+
+             ;; Lowest power of 2 that fits +max-fds-out+
+             (expt 2 (ceiling (log +max-fds-out+ 2)))
+             "Number of file descriptors to store in a fd buffer")
 
 (deftype buffer-data () 'cffi:foreign-pointer)
 (deftype buffer-offset () '(unsigned-byte 32))
@@ -22,18 +41,6 @@
   (cap   0                   :type buffer-offset)
   (start 0                   :type buffer-offset)
   (end   0                   :type buffer-offset))
-
-;; This magic number comes from libwayland. TODO: Figure out why
-(defconstant +max-fds-out+ 28)
-
-;; Both sizes must be powers of 2, so that LOGAND can be used to mask the
-;; length of the buffer.
-(defconstant +iobuf-size+ (* 4 4096)
-             "Number of octets to store in a ring buffer")
-(defconstant +fdbuf-size+
-             ;; Lowest power of 2 that fits +max-fds-out+
-             (expt 2 (ceiling (log +max-fds-out+ 2)))
-             "Number of file descriptors to store in a fd buffer")
 
 (defun allocate-ring-buffer (type size)
   "Allocate a ring buffer to hold SIZE elements of TYPE. Free with FREE-RING-BUFFER."
@@ -125,30 +132,32 @@
       (shiftout-ring-buffer buf count)))
   (values))
 
+(defun ring-buffer-pull-foreign-array (buf carray count)
+  "Move the contents of the ring buffer into the foreign array."
+  (declare (type ring-buffer buf)
+           (type cffi:foreign-pointer carray)
+           (type (integer 0) count))
+  (let* ((data (ring-buffer-data buf))
+         (cap (ring-buffer-cap buf))
+         (buf-start (logand (ring-buffer-start buf) (1- cap))))
+    (if (<= (+ buf-start count) cap)
+        (ffi:memcpy carray (cffi:inc-pointer data buf-start) count)
+        (let ((size (- cap buf-start)))
+          (ffi:memcpy carray (cffi:inc-pointer data buf-start) size)
+          (ffi:memcpy (cffi:inc-pointer carray size) data (- count size)))))
+  (shiftin-ring-buffer buf count))
+
 (defun ring-buffer-pull-sarray (buf sarray start end)
-  "Pull the contents of BUF into the simple octet array."
+  "Pull the contents of the ring buffer into the simple octet array."
   (declare (type ring-buffer buf)
            (type octet-sarray sarray)
            (type (integer 0) start)
-           (type (or null (integer 0)) end))
-  (let* ((data (ring-buffer-data buf))
-         (cap (ring-buffer-cap buf))
-         (buf-start (logand (ring-buffer-start buf) (1- cap)))
-         (count (- end start)))
-    (cffi-sys:with-pointer-to-vector-data (carray sarray)
-      (if (<= (+ buf-start count) cap)
-          (ffi:memcpy (cffi:inc-pointer carray start)
-                      (cffi:inc-pointer data buf-start)
-                      count)
-          (let ((size (- cap buf-start)))
-            (ffi:memcpy (cffi:inc-pointer carray start)
-                        (cffi:inc-pointer data buf-start)
-                        size)
-            (ffi:memcpy (cffi:inc-pointer carray (+ start size))
-                        data (- count size))))
-      (shiftin-ring-buffer buf count))))
+           (type (integer 0) end))
+  (cffi-sys:with-pointer-to-vector-data (carray sarray)
+    (ring-buffer-pull-foreign-array buf (cffi:inc-pointer carray start)
+                                    (- end start))))
 
-(defun make-gather-iovec (iov buf)
+(defun initialize-gather-iovec (iov buf)
   "Fill up to 2 elements of an unsized iovec array with filled buffer data, intended for a write operation.
 Return the number of elements filled."
   (let* ((cap (ring-buffer-cap buf))
@@ -156,7 +165,7 @@ Return the number of elements filled."
          (end (logand (ring-buffer-end buf) (1- cap)))
          (data (ring-buffer-data buf)))
     (cond
-      ((< start end)
+      ((<= start end)
        ;; 1 vector from start to end
        (setf (ffi:iovec.iov-base iov) (cffi:mem-aptr data :uint8 start)
              (ffi:iovec.iov-len iov) (- end start))
@@ -176,7 +185,7 @@ Return the number of elements filled."
 
 ;; Iovec operations are solely for octet ring buffers.
 
-(defun make-scatter-iovec (iov buf)
+(defun initialize-scatter-iovec (iov buf)
   "Fill up to 2 elements of an unsized iovec array with unset buffered data, intended for a read operation.
 Return the number of elements filled."
   (let* ((cap (ring-buffer-cap buf))
@@ -201,6 +210,50 @@ Return the number of elements filled."
              (ffi:iovec.iov-base (autowrap:c-aref iov 1 'ffi:iovec)) data
              (ffi:iovec.iov-len (autowrap:c-aref iov 1 'ffi:iovec)) start)
        2))))
+
+
+
+;; CMSG helpers
+
+;; TODO: these functions were handmade from
+;; </usr/src/linux-headers-5.18.0-2-common/include/linux/socket.h>.
+;; The cmsg(3) NOTES section states that "For portability, ancillary data
+;; should be accessed using only the macros described here."
+;;
+;; I ought to find a way to wrap the macros in the future, somehow.
+
+(declaim (inline cmsg-align cmsg-firsthdr cmsg-nxthdr
+                 cmsg-space cmsg-len cmsg-data))
+(defun cmsg-align (length)
+  (declare (type fixnum length))
+  (logand (+ length (load-time-value (1- (autowrap:sizeof :long))))
+          (load-time-value (lognot (1- (autowrap:sizeof :long))))))
+
+(defun cmsg-firsthdr (msgh)
+  (when (plusp (ffi:msghdr.msg-controllen msgh))
+    (autowrap:wrap-pointer (ffi:msghdr.msg-control msgh)
+                           'ffi:cmsghdr)))
+
+;; TODO cmsg-nxthdr for reading
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defun cmsg-space (length)
+    (declare (type fixnum length))
+    (+ (load-time-value (autowrap:sizeof 'ffi:cmsghdr))
+       (cmsg-align length))))
+
+(defun cmsg-len (length)
+  (declare (type fixnum length))
+  (+ (load-time-value (autowrap:sizeof 'ffi:cmsghdr))
+     length))
+
+(defun cmsg-data (cmsg)
+  (cffi:inc-pointer
+    (autowrap:ptr cmsg)
+    (load-time-value (autowrap:sizeof 'ffi:cmsghdr))))
+
+(defconstant +cspace+
+  (cmsg-space (* +max-fds-out+ (cffi:foreign-type-size :int))))
 
 
 
@@ -236,7 +289,7 @@ Return the number of elements filled."
 (defun fill-sockaddr-un (sun string)
   (declare (type string string))
   (assert (< (length string) (1- +sun-path-length+)))
-  (ffi:bzero sun (autowrap:sizeof '(:struct (ffi:sockaddr-un))))
+  (ffi:bzero sun (autowrap:sizeof 'ffi:sockaddr-un))
   (setf (ffi:sockaddr-un.sun-family sun) ffi:+af-unix+)
   (cffi:with-foreign-string (c-string string :null-terminated-p t)
     (ffi:memcpy
@@ -247,10 +300,10 @@ Return the number of elements filled."
 (defun connect (socket address-string)
   "Initiate a connection on a local socket."
   (check-type address-string string)
-  (autowrap:with-alloc (sun '(:struct (ffi:sockaddr-un)))
+  (autowrap:with-alloc (sun 'ffi:sockaddr-un)
     (fill-sockaddr-un sun address-string)
     (when (minusp (ffi:connect (slot-value socket 'fd) sun
-                               (autowrap:sizeof '(:struct (ffi:sockaddr-un)))))
+                               (autowrap:sizeof 'ffi:sockaddr-un)))
       (error 'socket-stream-error :errno ffi:*errno* :stream socket)))
 
   (change-class socket 'active-local-socket-stream))
@@ -262,16 +315,57 @@ Return the number of elements filled."
 
 ;; IO Helper Writers
 
+(defun initialize-gather-cmsg (cmsg output-fdbuf)
+  "Build the control message and return the real length."
+  (let* ((cmsghdr (autowrap:wrap-pointer cmsg 'ffi:cmsghdr))
+         (cmsgdata (cmsg-data cmsg))
+         (nfds (ring-buffer-length output-fdbuf))
+         (length (* nfds (cffi:foreign-type-size :int))))
+    (if (plusp nfds)
+        (progn
+          (setf (ffi:cmsghdr.cmsg-level cmsghdr) ffi:+sol-socket+
+                (ffi:cmsghdr.cmsg-type cmsghdr) ffi:+scm-rights+
+                (ffi:cmsghdr.cmsg-len cmsghdr) (+ length (autowrap:sizeof 'ffi:cmsghdr)))
+          ;; TODO rig RING-BUFFER-PULL-x to handle fd-sized buffers
+          (dotimes (i nfds)
+            (setf (cffi:mem-aref cmsgdata :int i)
+                  (ring-buffer-pop output-fdbuf :int)))
+          (cmsg-len length))
+        0)))
+
 (defun %flush-obufs (socket nonblocking?)
   "Flush the output buffers to the socket.
 Return two values: the number of octets written, and whether the call would have been blocked if NONBLOCKING? was NIL."
   (with-slots (fd output-iobuf output-fdbuf) socket
-    (declare (ignore output-fdbuf))
-    (autowrap:with-calloc (msghdr '(:struct (ffi:msghdr)))
-      (autowrap:with-alloc (iov 'ffi:iovec 2)
+    (when (ring-buffer-empty? output-iobuf)
+      ;; FIXME: If there's no iovec data, sendmsg() essentially no-ops. The
+      ;; same issue is found in iolib. This shouldn't be a problem for Wayland
+      ;; since every fd sent is part of a greater message, but if this is moved
+      ;; to a general-purpose library, this surprising behavior *needs* to be
+      ;; addressed.
+      (unless (ring-buffer-empty? output-fdbuf)
+        (error "Flushing ring buffer without I/O data."))
+      (return-from %flush-obufs (values 0 nil)))
+
+    (autowrap:with-calloc (msghdr 'ffi:msghdr)
+      (autowrap:with-many-alloc ((iov 'ffi:iovec 2)
+                                 (cmsg 'autowrap:uint8 +cspace+))
         (setf (ffi:msghdr.msg-iov msghdr) (autowrap:ptr iov)
-              (ffi:msghdr.msg-iovlen msghdr) (make-gather-iovec iov output-iobuf))
-        ;; TODO fill in cmsg with fdbufs here
+              (ffi:msghdr.msg-iovlen msghdr) (initialize-gather-iovec iov output-iobuf)
+              (ffi:msghdr.msg-control msghdr) cmsg
+              (ffi:msghdr.msg-controllen msghdr) (initialize-gather-cmsg cmsg output-fdbuf))
+
+        (when-debug
+          (a:when-let ((cmsgh (cmsg-firsthdr msghdr)))
+            (format *debug-io* "CMSG HEADER:~%Len: ~d~%Level: ~d~%Type: ~d~%Fd's: (~{~D~^ ~})~%"
+                    (ffi:cmsghdr.cmsg-len cmsgh)
+                    (ffi:cmsghdr.cmsg-level cmsgh)
+                    (ffi:cmsghdr.cmsg-type cmsgh)
+                    (loop :for offset := (autowrap:sizeof 'ffi:cmsghdr)
+                          :then (+ offset (autowrap:sizeof :int))
+                          :until (>= offset (ffi:cmsghdr.cmsg-len cmsgh))
+                          :collect (cffi:mem-ref (autowrap:ptr cmsgh) :int offset)))))
+
         (let ((nread (ffi:sendmsg fd msghdr (if nonblocking? ffi:+msg-dontwait+ 0))))
           (when (minusp nread)
             (let ((errno ffi:*errno*))
@@ -310,10 +404,10 @@ Return two values: the number of octets written, and whether the call would have
 Return two values: the number of octets read, and whether the call would have been blocked in NONBLOCKING? was NIL."
   (with-slots (fd input-iobuf input-fdbuf) socket
     (declare (ignore input-fdbuf))
-    (autowrap:with-calloc (msghdr '(:struct (ffi:msghdr)))
+    (autowrap:with-calloc (msghdr 'ffi:msghdr)
       (autowrap:with-alloc (iov 'ffi:iovec 2)
         (setf (ffi:msghdr.msg-iov msghdr) (autowrap:ptr iov)
-              (ffi:msghdr.msg-iovlen msghdr) (make-scatter-iovec iov input-iobuf))
+              (ffi:msghdr.msg-iovlen msghdr) (initialize-scatter-iovec iov input-iobuf))
         ;; TODO fill in cmsg to read fd's here
 
         (let ((nread (ffi:recvmsg fd msghdr (if nonblocking? ffi:+msg-dontwait+ 0))))
@@ -339,9 +433,8 @@ Return two values: the number of octets read, and whether the call would have be
         :do (ring-buffer-pull-sarray iobuf sarray offset (+ offset size))
             (incf offset size)
             (decf octets-left size)
-        :when (or (zerop octets-left)
-                  (zerop (%read-once socket nil)))
-        :do (loop-finish)
+        :until (or (zerop octets-left)
+                   (zerop (%read-once socket nil)))
         :finally (return offset)))
 
 (defun %read-into-vector (socket vector start end)
@@ -375,20 +468,27 @@ Return two values: the number of octets read, and whether the call would have be
   nil)
 
 (defmethod gray:stream-clear-output ((stream local-socket-stream))
-  "Clear all outstanding output data."
-  (with-slots (output-iobuf dirty?) stream
+  "Clear all outstanding output operations, including byte and fd I/O."
+  (with-slots (output-iobuf output-fdbuf dirty?) stream
     (clear-ring-buffer output-iobuf)
+    (clear-ring-buffer output-fdbuf)
     (setf dirty? nil)))
 
 (defmethod gray:stream-clear-input ((stream local-socket-stream))
-  "Clear all buffered input."
-  (with-slots (input-iobuf) stream
+  "Clear all buffered I/O and file descriptor input."
+  (with-slots (input-iobuf input-fdbuf) stream
+    (loop :until (ring-buffer-empty? input-fdbuf)
+          :for fd := (ring-buffer-pop input-fdbuf :int)
+          :do (ffi:close fd))
     (clear-ring-buffer input-iobuf)))
 
 (defmethod close ((socket local-socket-stream) &key abort)
   (when (and (%dirty? socket) (not abort))
     (finish-output socket))
   (with-slots (fd input-iobuf output-iobuf input-fdbuf output-fdbuf) socket
+    (gray:stream-clear-input socket)
+    (gray:stream-clear-output socket)
+
     (when input-iobuf (free-ring-buffer input-iobuf))
     (when output-iobuf (free-ring-buffer output-iobuf))
     (when input-fdbuf (free-ring-buffer input-fdbuf))
@@ -411,25 +511,6 @@ Return two values: the number of octets read, and whether the call would have be
   (%flush-obufs-if-needed stream)
   (with-slots (output-iobuf) stream
     (ring-buffer-push output-iobuf :uint8 byte)))
-
-(defun flush-with-sequence (socket sequence start end)
-  (declare (type local-socket-stream socket)
-           (type octet-sarray sequence)
-           (type fixnum start)
-           (type (or fixnum null) end))
-  (autowrap:with-many-alloc ((iov 'ffi:iovec 3)
-                             (msghdr '(:struct (ffi:msghdr))))
-    (cffi:with-foreign-array (c-arr sequence '(:array :uint8 (length sequence)))
-      (with-slots (output-iobuf fd) socket
-        (let ((iobuf-nvecs (make-gather-iovec iov output-iobuf)))
-          (setf (ffi:iovec.iov-base (autowrap:c-aref iov iobuf-nvecs 'ffi:iovec))
-                (cffi:mem-aptr c-arr :uint8 start)
-                (ffi:iovec.iov-len (autowrap:c-aref iov iobuf-nvecs 'ffi:iovec))
-                (- (or end (length sequence)) start)
-                (ffi:msghdr.msg-iovlen msghdr) (1+ iobuf-nvecs)))
-        (when (minusp (ffi:sendmsg fd msghdr 0))
-          (error 'socket-stream-error :errno ffi:*errno* :stream socket))
-        (clear-ring-buffer output-iobuf)))))
 
 (defmethod gray:stream-write-sequence ((stream local-socket-stream) sequence start end &key)
   (etypecase sequence
@@ -455,8 +536,23 @@ Return two values: the number of octets read, and whether the call would have be
 
 (defmethod gray:stream-listen ((stream local-socket-stream))
   (with-slots (input-iobuf) stream
-    (or (ring-buffer-empty? input-iobuf)
+    (or (not (ring-buffer-empty? input-iobuf))
         (plusp (%read-once stream t)))))
 
-;; TODO write-fd
-;; TODO read-fd
+(defun write-fd (socket fd)
+  "Write a file descriptor to the socket stream.
+Like binary I/O, fd's may be buffered and affected by FINISH-OUTPUT, FORCE-OUTPUT, and CLEAR-OUTPUT."
+  (check-type socket local-socket-stream)
+  (check-type fd (integer 0))
+  (with-slots (output-fdbuf) socket
+    (when (= (ring-buffer-length output-fdbuf) +max-fds-out+)
+      (%flush-obufs socket nil))
+    (ring-buffer-push output-fdbuf :int fd)))
+
+(defun read-fd (socket)
+  "Pop a buffered file descriptor or return NIL.
+Like binary I/O, buffered fd's may be affected by CLEAR-INPUT."
+  (check-type socket local-socket-stream)
+  (with-slots (input-fdbuf) socket
+    (unless (ring-buffer-empty? input-fdbuf)
+      (ring-buffer-pop input-fdbuf :int))))

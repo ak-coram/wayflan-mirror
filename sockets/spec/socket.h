@@ -6,4 +6,7 @@
 
 // autowrap:c-aref uses make-instance which doesn't work on types like
 // (:struct (ffi:iovec)):
+typedef struct sockaddr_un sockaddr_un;
 typedef struct iovec iovec;
+typedef struct cmsghdr cmsghdr;
+typedef struct msghdr msghdr;
