@@ -143,13 +143,20 @@
               (list :uint (intern (lispify enum)))
               :uint))
     ("fixed" :fixed)
-    ("string" :string)
-    ("object" (a:if-let ((interface (dom:attribute dom-arg "interface")))
-                (list :object (intern (lispify interface)))
-                :object))
-    ("new_id" (a:if-let ((interface (dom:attribute dom-arg "interface")))
-                (list :new-id (intern (lispify interface)))
-                :new-id))
+    ("string"
+     `(:string
+        ,@(a:when-let ((allow-null (dom:attribute dom-arg "allow-null")))
+            `(:allow-null (string= allow-null "true")))))
+    ("object"
+     `(:object
+        ,@(a:when-let ((interface (dom:attribute dom-arg "interface")))
+            `(:interface ,(intern (lispify interface))))
+        ,@(a:when-let ((allow-null (dom:attribute dom-arg "allow-null")))
+            `(:allow-null (string= allow-null "true")))))
+    ("new_id"
+     `(:new-id
+        ,@(a:when-let ((interface (dom:attribute dom-arg "interface")))
+            `(:interface ,(intern (lispify interface))))))
     ("array" :array)
     ("fd" :fd)))
 

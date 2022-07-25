@@ -337,9 +337,18 @@ A lisp Wayland type (an s-expr form of libwayland's wl_message) is either a
 keyword that specifies the primary type, or a list that contains the keyword at
 the start, followed by a symbol, its secondary type.
 
-Only :UINT, :OBJECT, and :NEW-ID may be in the list form. A :UINT's secondary
-type is the name of an enum defined by DEFINE-ENUM, while an :OBJECT or
-:NEW-ID's secondary type is an interface defined by DEFINE-INTERFACE.
+Parameterized typenames may be consed as the head of a property list, e.g.
+a :UINT type may be specialized as (:UINT :ENUM WL-SHM-FORMAT), or an
+:OBJECT may be (:OBJECT :INTERFACE WL-SURFACE :ALLOW-NULL T).
+
+Type specializers:
+
+:ENUM - specializes a :UINT to be a member of an enum.
+:INTERFACE - specializes an :OBJECT or :NEW-ID to be an instance of an
+             interface.
+:ALLOW-NULL - specializes an :OBJECT or :STRING to be nullable. Lisp calls
+              may pass in NIL.
+
 
 A WLTYPE-XCASE key is a list containing the matching keyword, followed by a
 destructuring lambda-list bound under the case's body."
@@ -374,12 +383,22 @@ destructuring lambda-list bound under the case's body."
     (:uint `(wire:read-wl-uint ,buffer))
     (:fixed `(wire:read-wl-fixed ,buffer))
     (:string `(wire:read-wl-string ,buffer))
-    (:object
+    ((:object &key interface allow-null)
       ;; TODO When the interface is given, check that the server has provided
       ;; the correct type.
-      `(find-proxy (wl-proxy-display ,sender)
-                   (wire:read-wl-uint ,buffer)))
-    ((:new-id &optional interface)
+      (a:with-gensyms (id)
+        (let* ((proxy-form
+                 `(find-proxy (wl-proxy-display ,sender) ,id))
+               (checked-proxy-form
+                 (if allow-null
+                     `(when ,id ,proxy-form)
+                     proxy-form)))
+          `(let* ((,id (wire:read-wl-uint ,buffer))
+                  (proxy ,checked-proxy-form))
+             ,@(when interface
+                 `((check-type proxy ,interface)))
+             proxy))))
+    ((:new-id &key interface)
      (if interface
          `(make-proxy ',interface
                       (wl-proxy-display ,sender)
@@ -395,14 +414,24 @@ destructuring lambda-list bound under the case's body."
     (:uint `(wire:write-wl-uint ,place ,buffer))
     (:fixed `(wire:write-wl-fixed ,place ,buffer))
     (:string `(wire:write-wl-string ,place ,buffer))
-    ((:object &optional interface)
-     `(wire:write-wl-uint
-        ,(if interface
-             `(progn (check-type ,place ,interface)
-                     (wl-proxy-id ,place))
-             `(wl-proxy-id ,place))
-        ,buffer))
-    ((:new-id &optional interface)
+    ((:object &key interface allow-null)
+     (a:once-only (place)
+       (let* ((proxy-id-form
+                (if allow-null
+                    `(if ,place (wl-proxy-id ,place) 0)
+                    `(wl-proxy-id ,place)))
+              (checked-id-form
+                (if interface
+                    `(progn
+                       (check-type ,place ,(if allow-null
+                                               `(or null ,interface)
+                                               interface))
+                       ,proxy-id-form)
+                    proxy-id-form)))
+         `(wire:write-wl-uint
+            ,checked-id-form
+            ,buffer))))
+    ((:new-id &key interface)
      (if interface
          `(wire:write-wl-uint (wl-proxy-id ,place) ,buffer)
          `(progn
@@ -484,16 +513,16 @@ OPTIONS:
                (dolist (specifier arg-specifiers)
                  (let ((type (getf (rest specifier) :type)))
                    (%wltype-case type
-                     ((:new-id &optional type-interface)
-                      (return (if type-interface
-                                  `(quote ,type-interface)
+                     ((:new-id &key interface)
+                      (return (if interface
+                                  `(quote ,interface)
                                   'new-interface)))))))
              (lambda-list-tail
                (mapcan (lambda (specifier)
                          (%specifier-bind (name &key type &allow-other-keys) specifier
                            (%wltype-case type
-                             ((:new-id &optional type-interface)
-                              (unless type-interface
+                             ((:new-id &key interface)
+                              (unless interface
                                 (list new-proxy-interface 'version)))
                              (t (list name)))))
                        arg-specifiers))

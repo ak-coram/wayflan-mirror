@@ -23,6 +23,12 @@ Executes the body with DISPLAY bound to a freshly connected display."
        (progn ,@body)
        (wl-display-disconnect ,display))))
 
+(defmacro with-proxy ((var value) &body body)
+  "Bind the proxy variable VAR to VALUE, and destroy it when execution leaves the body."
+  `(let ((,var ,value))
+     (unwind-protect (progn ,@body)
+       (destroy-proxy ,var))))
+
 (define-condition close-app ()
   ())
 
@@ -94,7 +100,8 @@ Executes the body with DISPLAY bound to a freshly connected display."
 (defmethod handle-event :before ((app superapp) sender event)
   ;; Report all events to output for debugging.
   (unless (typep event 'wl-registry-global-event)
-    (format t "Handling ~A for ~S~%" (class-of event) sender)))
+    ;;(format t "Handling ~A for ~S~%" (class-of event) sender)
+    ))
 
 (defmethod handle-event ((app superapp) registry (event wl-registry-global-event))
   (with-accessors ((name wl-event-name)
@@ -147,8 +154,7 @@ Executes the body with DISPLAY bound to a freshly connected display."
       ;; Submit a new frame for this event
       (let ((wl-buffer (draw-frame app)))
         (wl-surface-attach wl-surface wl-buffer 0 0)
-        (wl-surface-damage-buffer wl-surface 0 0
-                                  (1- (expt 2 31)) (1- (expt 2 31)))
+        (wl-surface-damage-buffer wl-surface 100 100 200 200)
         (wl-surface-commit wl-surface))
 
       (setf last-frame time))))
@@ -178,6 +184,9 @@ Executes the body with DISPLAY bound to a freshly connected display."
         (zxdg-toplevel-decoration-v1-set-mode
           zxdg-decoration
           +zxdg-toplevel-decoration-v1-mode-server-side+)
+        (with-proxy (region (wl-compositor-create-region wl-compositor))
+          (wl-region-add region 0 0 10000 10000)
+          (wl-surface-set-opaque-region wl-surface region))
         (wl-surface-commit wl-surface)
 
         (let ((cb (wl-surface-frame wl-surface)))
