@@ -14,4 +14,5 @@
 (xyz.shunter.wayflan.autowrap:wl-include
   #.(merge-pathnames #P"protocols/wayland.xml"
                      (asdf:system-source-directory '#:wayflan))
+  :exclude-defclasses (wl-display)
   :export t)

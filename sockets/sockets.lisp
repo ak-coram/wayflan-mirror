@@ -25,7 +25,7 @@
              "Number of octets to store in a ring buffer")
 (defconstant +fdbuf-size+
              ;; Lowest power of 2 that fits +max-fds-out+
-             (expt 2 (ceiling (log +max-fds-out+ 2)))
+             (ash 1 (ceiling (log +max-fds-out+ 2)))
              "Number of file descriptors to store in a fd buffer")
 
 (deftype buffer-data () 'cffi:foreign-pointer)

@@ -143,10 +143,18 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
   (setf (%wl-proxy-id new-proxy) id
         (gethash id (%proxy-table display)) new-proxy))
 
-(defun destroy-proxy (proxy)
-  "Delist the proxy from its display and mark it as destroyed."
+(defun %destroy-proxy (proxy)
+  (declare (type wl-proxy proxy))
   (change-class proxy 'wl-destroyed-proxy)
   (values))
+
+(defgeneric destroy-proxy (proxy)
+  (:documentation "Delist the proxy from its display and mark it as destroyed.")
+  (:method ((proxy wl-proxy))
+   (%destroy-proxy proxy))
+  (:method ((proxy wl-display))
+   (error "Clients cannot destroy a ~S. Call ~S instead."
+          'wl-display 'wl-display-disconnect)))
 
 (defun clear-proxies (display)
   "Mark all owned proxies as removed and return DISPLAY."
@@ -155,7 +163,7 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
       (loop
         (multiple-value-bind (more? id proxy) (next-item)
           (unless more? (return))
-          (destroy-proxy proxy)
+          (%destroy-proxy proxy)
           (remhash id proxy-table)))))
   (values))
 
@@ -203,7 +211,7 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
   "Mark the object as destroyed and remove it from the object table."
   (let* ((id (wl-event-id event))
          (proxy (find-proxy display id)))
-    (destroy-proxy proxy)
+    (%destroy-proxy proxy)
     (remhash id (%proxy-table display))))
 
 (defmethod dispatch-event :before (display (event wl-display-error-event))
@@ -467,7 +475,8 @@ OPTIONS:
 (:DOCUMENTATION DOCSTRING) - Provided to the function as its docstring."
   (%option-bind (documentation type) options
     (a:with-gensyms (buffer)
-      (let* ((new-proxy-interface
+      (let* ((destructor? (eq (first type) :destructor))
+             (new-proxy-interface
                ;; If a new proxy is being created, in this request, the form to
                ;; evaluate to the proxy's interface. If the type is fixed, it's
                ;; that type, quoted. Otherwise, it's the interface's name given in
@@ -500,24 +509,40 @@ OPTIONS:
                                              ,type
                                              ,interface
                                              ,buffer)))
-                             arg-specifiers))
-                 ,@(when (eq (first type) :destructor)
-                     `((destroy-proxy ,interface))))))
-        `(defun ,name ,(list* interface lambda-list-tail)
-           ,@documentation
-           (check-type ,interface ,interface)
-           ,(cond
-              (new-proxy-interface
-                `(let ((new-proxy (make-proxy ,new-proxy-interface
-                                              (wl-proxy-display ,interface)
-                                              ,@(when (member 'version lambda-list-tail)
-                                                  '(:version version)))))
-                   ,@output-body
-                   new-proxy))
-              ((> (length output-body) 1)
-               `(progn ,@output-body))
-              (t
-               (first output-body))))))))
+                             arg-specifiers))))
+             (defun-body
+               `(,@documentation
+                  ;; Destructor methods won't need the check-type, because
+                  ;; it's already specialized in the parameter list.
+                  ,@(unless destructor?
+                      `((check-type ,interface ,interface)))
+                  ,(cond
+                     (new-proxy-interface
+                       `(let ((new-proxy (make-proxy ,new-proxy-interface
+                                                     (wl-proxy-display ,interface)
+                                                     ,@(when (member 'version lambda-list-tail)
+                                                         '(:version version)))))
+                          ,@output-body
+                          new-proxy))
+                     ((> (length output-body) 1)
+                      `(progn ,@output-body))
+                     (t
+                      (first output-body)))))
+             (defun-head `(defun ,name ,(list* interface lambda-list-tail))))
+        ;; If the request is a destructor, put the logic in a DESTROY-PROXY
+        ;; method and use the function name as a synonym.
+        (if destructor?
+            (progn
+              (assert (null arg-specifiers)
+                      (arg-specifiers)
+                      "Destructor request cannot have any parameters")
+              `(prog1
+                 (,@defun-head
+                   (destroy-proxy ,interface))
+                 (defmethod destroy-proxy :before ((,interface ,interface))
+                   ,@defun-body)))
+            `(,@defun-head
+               ,@defun-body))))))
 
 (defmacro define-event ((name interface opcode) &body (arg-specifiers &rest options))
   "Define a class and a READ-EVENT method to support WL-DISPLAY-DISPATCH-EVENT.

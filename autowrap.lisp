@@ -88,12 +88,16 @@
 
 
 
+(defvar *syms-to-export*)
+(defvar *exclude-defclasses*)
+
 ;; Transformation Functions
 
 (defun lispify (string)
   "Transform a snake_cased string into a string fit to turn to a symbol."
   (map 'string
        (lambda (char)
+         (declare (type character char))
          (if (char= char #\_)
              #\-
              char))
@@ -149,11 +153,11 @@
     ("array" :array)
     ("fd" :fd)))
 
-(defun transform-arg (dom-arg syms &key event-p)
+(defun transform-arg (dom-arg &key event-p)
   (let ((name (if event-p
                   (event-arg-name dom-arg)
                   (request-arg-name dom-arg))))
-    (pushnew name (car syms))
+    (pushnew name *syms-to-export*)
     `(,name
        :type ,(arg-type dom-arg)
        ,@(when event-p
@@ -161,35 +165,35 @@
        ,@(a:when-let ((summary (summary* dom-arg)))
            `(:documentation ,summary)))))
 
-(defun transform-request (dom-request interface opcode syms)
+(defun transform-request (dom-request interface opcode)
   (let ((name (request-name interface dom-request)))
-    (pushnew name (car syms))
+    (pushnew name *syms-to-export*)
 
     `(client:define-request ,(list name interface opcode)
-       ,(map 'list (a:rcurry #'transform-arg syms :event-p nil)
+       ,(map 'list (a:rcurry #'transform-arg :event-p nil)
              (args dom-request))
        ,@(a:when-let ((summary (summary* dom-request)))
            `((:documentation ,summary)))
        ,@(a:when-let ((type (dom:attribute dom-request "type")))
-           `((:type ,(a:make-keyword (string-upcase type))))))))
+           `((:type ,(a:make-keyword (lispify type))))))))
 
-(defun transform-event (dom-event interface-event interface opcode syms)
+(defun transform-event (dom-event interface-event interface opcode)
   (let ((name (event-name interface dom-event)))
-    (pushnew name (car syms))
+    (pushnew name *syms-to-export*)
     `(client:define-event ,(list name interface opcode)
-       ,(map 'list (a:rcurry #'transform-arg syms :event-p t)
+       ,(map 'list (a:rcurry #'transform-arg :event-p t)
              (args dom-event))
        (:event-superclasses ,interface-event)
        ,@(a:when-let ((summary (summary* dom-event)))
            `((:documentation ,summary))))))
 
-(defun transform-enum (dom-enum interface syms)
+(defun transform-enum (dom-enum interface)
   (let ((name (enum-name interface dom-enum)))
     `(client:define-enum ,name ()
        ,(map 'list
              (lambda (dom-entry)
                (let ((entry-name (enum-entry-name interface dom-enum dom-entry)))
-                 (pushnew entry-name (car syms))
+                 (pushnew entry-name *syms-to-export*)
                  (list entry-name
                        (value dom-entry)
                        :documentation (summary dom-entry))))
@@ -199,19 +203,19 @@
        ,@(when (string= "true" (bitfield dom-enum))
            `((:bitfield t))))))
 
-(defun transform-interface (dom-interface syms)
+(defun transform-interface (dom-interface)
   (let ((name (interface-name dom-interface))
         (version (parse-integer (version dom-interface)))
         (event-name (interface-event-name dom-interface))
         (requests (requests dom-interface))
         (events (events dom-interface))
         (enums (enums dom-interface)))
-    (pushnew name (car syms))
-    (pushnew event-name (car syms))
+    (pushnew name *syms-to-export*)
+    (pushnew event-name *syms-to-export*)
 
     `((client:define-interface ,name ()
-        ;; wl_display is specially defined, so don't stub this out.
-        ,@(when (string= name 'client:wl-display)
+        ,@(when (member name *exclude-defclasses*
+                        :test #'string=)
             `((:skip-defclass t)))
         (:version ,version)
         (:event-class ,event-name)
@@ -222,23 +226,23 @@
 
        ,@(map 'list
               (lambda (dom-enum)
-                (transform-enum dom-enum name syms))
+                (transform-enum dom-enum name))
               enums)
 
        ,@(let ((opcode -1))
            (map 'list
                 (lambda (dom-request)
-                  (transform-request dom-request name (incf opcode) syms))
+                  (transform-request dom-request name (incf opcode)))
                 requests))
 
        ,@(let ((opcode -1))
            (map 'list
                 (lambda (dom-event)
-                  (transform-event dom-event event-name name (incf opcode) syms))
+                  (transform-event dom-event event-name name (incf opcode)))
                 events)))))
 
-(defun transform-protocol (dom-protocol syms)
-  (let* ((interface-forms (mapcar (a:rcurry #'transform-interface syms)
+(defun transform-protocol (dom-protocol)
+  (let* ((interface-forms (mapcar #'transform-interface
                                   (coerce (interfaces dom-protocol) 'list)))
          ;; Each transformed interface starts with a single DEFINE-INTERFACE
          ;; form, followed by all other DEFINE-X forms.
@@ -253,16 +257,16 @@
     (append define-interface-forms
             other-define-forms)))
 
-(defmacro wl-include (input &key export)
+(defmacro wl-include (input &key export exclude-defclasses)
   "Define the collection of interfaces, enums, requests, and events described by INPUT, for use by a Wayland client.
 
 INPUT - A stream to an XML file, a pathname to an XML file, or an XML string.
 EXPORT - If true, export all interned symbols in the current package."
   (let ((plump:*tag-dispatchers* plump:*xml-tags*)
-        (syms (cons () nil)))
+        *syms-to-export*
+        (*exclude-defclasses* exclude-defclasses))
     `(progn
        ,@(transform-protocol
-           (protocol (plump:parse input))
-           syms)
+           (protocol (plump:parse input)))
        ,@(when export
-          `((export ',(car syms)))))))
+           `((export ',*syms-to-export*))))))
