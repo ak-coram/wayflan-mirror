@@ -5,9 +5,6 @@
 
 (in-package #:xyz.shunter.wayflan.autowrap)
 
-;; TODO quite a few superfluous symbols get interned & exported, like wayflan-client:transform.
-;; Fix this.
-
 
 
 ;; DOM-walking utils and macros
@@ -111,27 +108,33 @@
 (defun hyphenize (&rest strings)
   (format nil "~{~A~^-~}" (mapcar #'lispify strings)))
 
+(defun dot (base &rest rest)
+  (format nil "~A.~A" (lispify base) (apply #'hyphenize rest)))
+
+(defun muff (name)
+  (format nil "+~A+" name))
+
 (defun interface-name (dom-interface)
-  (intern (hyphenize (name dom-interface))))
+  (intern (lispify (name dom-interface))))
 
 (defun interface-event-name (dom-interface)
   (intern (hyphenize (name dom-interface)
                      '#:event)))
 
 (defun request-name (interface-name dom-request)
-  (intern (hyphenize interface-name (name dom-request))))
+  (intern (dot interface-name (name dom-request))))
 
 (defun event-name (interface-name dom-event)
-  (intern (hyphenize interface-name
-                     (name dom-event)
-                     '#:event)))
+  (intern (dot interface-name
+               (name dom-event)
+               '#:event)))
 
 (defun enum-name (interface-name dom-enum)
-  (intern (hyphenize interface-name (name dom-enum))))
+  (intern (dot interface-name (name dom-enum))))
 
 (defun enum-entry-name (interface-name dom-enum dom-entry)
-  (intern (format nil "+~A+"
-                  (hyphenize interface-name (name dom-enum) (name dom-entry)))))
+  (intern (muff (dot interface-name
+                     (name dom-enum) (name dom-entry)))))
 
 (defun event-arg-name (dom-arg)
   (intern (hyphenize '#:wl-event (name dom-arg))))
@@ -169,7 +172,8 @@
   (let ((name (if event-p
                   (event-arg-name dom-arg)
                   (request-arg-name dom-arg))))
-    (pushnew name *syms-to-export*)
+    (when event-p
+      (pushnew name *syms-to-export*))
     `(,name
        :type ,(arg-type dom-arg)
        ,@(when event-p

@@ -195,9 +195,9 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
 
 ;; Stub out some classes for now -- it'll be redefined by WL-INCLUDE in
 ;; protocols.lisp
-(defclass wl-callback-done-event (wl-event) ())
-(defclass wl-display-delete-id-event (wl-event) ())
-(defclass wl-display-error-event (wl-event) ())
+(defclass wl-callback.done-event (wl-event) ())
+(defclass wl-display.delete-id-event (wl-event) ())
+(defclass wl-display.error-event (wl-event) ())
 
 (defgeneric dispatch-event (sender event)
   (:documentation "Inform a proxy about an event of interest. Usually, emit the event across its listeners."))
@@ -207,14 +207,14 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
   (dolist (listener (wl-proxy-listeners sender))
     (handle-event listener sender event)))
 
-(defmethod dispatch-event :before (display (event wl-display-delete-id-event))
+(defmethod dispatch-event :before (display (event wl-display.delete-id-event))
   "Mark the object as destroyed and remove it from the object table."
   (let* ((id (wl-event-id event))
          (proxy (find-proxy display id)))
     (%destroy-proxy proxy)
     (remhash id (%proxy-table display))))
 
-(defmethod dispatch-event :before (display (event wl-display-error-event))
+(defmethod dispatch-event :before (display (event wl-display.error-event))
   ;; Errors are fatal. When an error is received, the display can no longer be
   ;; used.
   (wl-display-disconnect display)
@@ -227,7 +227,7 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
   ((%callback :initarg :callback))
   (:documentation "Used by WL-DISPLAY-ROUNDTRIP to funcall an assigned closure."))
 
-(defmethod handle-event ((listener roundtrip-listener) sender (event wl-callback-done-event))
+(defmethod handle-event ((listener roundtrip-listener) sender (event wl-callback.done-event))
   (funcall (slot-value listener '%callback)))
 
 ;; Display management
@@ -298,7 +298,7 @@ underlying stream when WL-DISPLAY-DISCONNECT is called."
 
 (defun wl-display-roundtrip (display)
   "Block and dispatch events until all requests sent up to this point have been finalized."
-  (let ((callback (wl-display-sync display))
+  (let ((callback (wl-display.sync display))
         (sync-complete nil))
     (unwind-protect
       (progn
