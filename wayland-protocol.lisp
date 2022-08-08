@@ -1,8 +1,10 @@
-;;; protocols.lisp -- Wayland stable protocols implementations
+;;; wayland-protocol.lisp -- Wayland core protocol implementation
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter.
 ;;; All rights reserved.
 
+;; The current wayland.xml is from wayland release 1.20.0 (Dec 2021)
+;;
 ;; This file is loaded before all other protocols, as other protocols are
 ;; dependent on wayland core types (such as wl-output, wl-buffer, etc).
 ;; Separating them out by file prevents symbol conflicts, since evaluating
@@ -12,7 +14,6 @@
 (in-package #:xyz.shunter.wayflan.client)
 
 (xyz.shunter.wayflan.autowrap:wl-include
-  #.(merge-pathnames #P"protocols/wayland.xml"
-                     (asdf:system-source-directory '#:wayflan))
+  '(#:wayflan #:protocols "wayland.xml")
   :exclude-defclasses (wl-display)
   :export t)

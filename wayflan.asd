@@ -39,12 +39,18 @@
                #:wayflan/sockets)
 
   :serial t
-  :components ((:file #:packages)
-               (:file #:wire)
-               (:file #:client)
-               (:file #:autowrap)
-               (:file #:wayland-protocol)
-               (:file #:protocols))
+  :components ((:module #:protocols
+                        :pathname "protocols"
+                        :components ((:static-file "wayland.xml")
+                                     (:static-file "presentation-time.xml")
+                                     (:static-file "viewporter.xml")
+                                     (:static-file "xdg-shell.xml")))
+               (:file "packages")
+               (:file "wire")
+               (:file "client")
+               (:file "autowrap")
+               (:file "wayland-protocol")
+               (:file "stable-protocols"))
 
   :in-order-to ((test-op (test-op :wayflan/test))))
 

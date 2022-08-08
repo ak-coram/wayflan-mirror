@@ -5,6 +5,11 @@
 
 (in-package #:xyz.shunter.wayflan.autowrap)
 
+;; TODO quite a few superfluous symbols get interned & exported, like wayflan-client:transform.
+;; Fix this.
+
+
+
 ;; DOM-walking utils and macros
 
 (defmacro definline (name lambda-list &body body)
@@ -264,6 +269,15 @@
     (append define-interface-forms
             other-define-forms)))
 
+(defun pathname-or-input (input)
+  (etypecase input
+    (cons (asdf:component-pathname
+            (or (asdf:find-component (first input) (rest input))
+                (error "System ~S path not found: ~S"
+                       (first input) (rest input)))))
+    ((or pathname string stream)
+     input)))
+
 (defmacro wl-include (input &key export exclude-defclasses)
   "Define the collection of interfaces, enums, requests, and events described by INPUT, for use by a Wayland client.
 
@@ -274,6 +288,6 @@ EXPORT - If true, export all interned symbols in the current package."
         (*exclude-defclasses* exclude-defclasses))
     `(progn
        ,@(transform-protocol
-           (protocol (plump:parse input)))
+           (protocol (plump:parse (pathname-or-input (eval input)))))
        ,@(when export
            `((export ',*syms-to-export*))))))
