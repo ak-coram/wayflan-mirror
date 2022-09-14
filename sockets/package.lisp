@@ -1,12 +1,57 @@
 ;;; sockets/package.lisp - socket package declarations
 
 (defpackage #:xyz.shunter.wayflan.sockets.ffi
+  (:use #:cffi)
   (:import-from #:cl
-                #:t
-                #:nil
                 #:defpackage
                 #:in-package)
-  (:export #:*errno*))
+  (:export #:sa-faimly
+           #:signed-size
+           #:size
+           #:socklen
+
+           #:+af-local+
+           #:+sock-stream+
+           #:+sol-socket+
+           #:+scm-rights+
+
+           #:iovec
+           #:iov-base
+           #:iov-len
+
+           #:msghdr
+           #:msg-name
+           #:msg-namelen
+           #:msg-iov
+           #:msg-iovlen
+           #:msg-control
+           #:msg-controllen
+           #:msg-flags
+
+           #:cmsghdr
+           #:cmsg-len
+           #:cmsg-level
+           #:cmsg-type
+
+           #:sockaddr-un
+           #:sun-family
+           #:sun-path
+
+           #:socket
+           #:bind
+           #:accept
+           #:connect
+           #:close
+           #:sendmsg
+           #:recvmsg
+
+           #:bzero
+           #:memcpy
+           #:memset
+           #:memmove
+           #:strerror
+           #:errno
+           #:*errno*))
 
 (defpackage #:xyz.shunter.wayflan.sockets
   (:use #:cl)

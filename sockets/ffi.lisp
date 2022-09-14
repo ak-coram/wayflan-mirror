@@ -7,48 +7,88 @@
 
 
 
-(autowrap:c-include '(#:wayflan/sockets #:spec "socket.h")
-                    :spec-path '(#:wayflan/sockets #:spec)
-                    :exclude-definitions (".*")
-                    :include-definitions ("_t$"
-                                          "^__"
-
-                                          ;; Structs
-                                          "^iovec$"
-                                          "^msghdr$"
-                                          "^cmsghdr$"
-                                          "^sockaddr$"
-                                          "^sockaddr_un$"
-
-                                          ;; Constants
-                                          "^O_" ;; open flags
-                                          "^S_" ;; permission bits
-                                          "^E" ;; errno constants
-                                          "^AF_UNIX$"
-                                          "^SOCK_STREAM$"
-                                          "^MSG_"
-                                          "^SOL_SOCKET$"
-                                          "^SCM_RIGHTS$"
-
-                                          ;; Syscalls
-                                          "^socket$"
-                                          "^bind$"
-                                          "^accept$"
-                                          "^connect$"
-                                          "^close$"
-                                          "^sendmsg$"
-                                          "^recvmsg$"
-
-                                          ;; C lib
-                                          "^bzero$"
-                                          "^memcpy$"
-                                          "^memset$"
-                                          "^memmove$"
-                                          "^strerror$"))
-
-(cffi:defcvar "errno" :int)
-
 (cffi:define-foreign-library libc
   (:default "libc"))
 
 (cffi:use-foreign-library libc)
+
+(defcstruct iovec
+  (iov-base :pointer)
+  (iov-len size))
+
+(defcstruct msghdr
+  (msg-name :pointer)
+  (msg-namelen socklen)
+  (msg-iov (:pointer (:struct iovec)))
+  (msg-iovlen size)
+  (msg-control :pointer)
+  (msg-controllen size)
+  (msg-flags :int))
+
+(defcstruct cmsghdr
+  (cmsg-len size)
+  (cmsg-level :int)
+  (cmsg-type :int)
+  ;; Followed by an unsigned char CMSG_DATA(cmsghdr)
+  )
+
+(defcstruct sockaddr-un
+  (sun-family sa-family)
+  (sun-path :char :count 108))
+
+(defcfun "socket" :int
+  (domain :int)
+  (type :int)
+  (protocol :int))
+
+(defcfun "bind" :int
+  (sockfd :int)
+  (addr :pointer)
+  (addrlen socklen))
+
+(defcfun "accept" :int
+  (sockfd :int)
+  (addr :pointer)
+  (addrlen (:pointer socklen)))
+
+(defcfun "connect" :int
+  (sockfd :int)
+  (addr :pointer)
+  (addrlen socklen))
+
+(defcfun "close" :int
+  (fd :int))
+
+(defcfun "sendmsg" signed-size
+  (sockfd :int)
+  (msg (:pointer (:struct msghdr)))
+  (flags msg-flags))
+
+(defcfun "recvmsg" signed-size
+  (sockfd :int)
+  (msg (:pointer (:struct msghdr)))
+  (flags msg-flags))
+
+(defcfun "bzero" :void
+  (s :pointer)
+  (n size))
+
+(defcfun "memcpy" :pointer
+  (dest :pointer)
+  (src :pointer)
+  (n size))
+
+(defcfun "memset" :pointer
+  (s :pointer)
+  (c :int)
+  (n size))
+
+(defcfun "memmove" :pointer
+  (dest :pointer)
+  (src :pointer)
+  (n size))
+
+(defcfun "strerror" :string
+  (errnum errno))
+
+(cffi:defcvar ("errno" *errno*) errno)

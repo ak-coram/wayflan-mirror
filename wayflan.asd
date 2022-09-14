@@ -10,9 +10,10 @@
 
   :description "Local socket interface for Wayland connections"
 
+  :defsystem-depends-on (#:cffi-grovel)
   :depends-on (#:alexandria
                #:cffi
-               #:cl-autowrap
+               #:cffi-libffi
                #:trivial-gray-streams)
   :pathname #P"sockets/"
   :serial t
@@ -20,6 +21,7 @@
                 :pathname "spec"
                 :components ((:static-file "socket.h")))
                (:file "package")
+               (:cffi-grovel-file "grovel")
                (:file "ffi")
                (:file "conditions")
                (:file "sockets")))
