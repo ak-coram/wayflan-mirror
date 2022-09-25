@@ -66,9 +66,9 @@ Executes the body with DISPLAY bound to a freshly connected display."
            (offset* (mod offset 8))
            pool
            buffer)
-      (posix-shm:with-mmapped-shm* (fd pool-data (:direction :io :permissions '(:user-all))
-                                       ((cffi:null-pointer) size '(:read :write) 0))
-        (setf pool (wl-shm.create-pool wl-shm fd size)
+      (posix-shm:with-open-shm-and-mmap* (shm pool-data (:direction :io :permissions '(:user-all))
+                                              ((cffi:null-pointer) size '(:read :write) 0))
+        (setf pool (wl-shm.create-pool wl-shm (shm:shm-file-descriptor shm) size)
               buffer (wl-shm-pool.create-buffer pool 0 width height stride
                                                 +wl-shm.format-xrgb8888+))
 

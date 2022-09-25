@@ -14,10 +14,12 @@
 
 ;; Ring Buffers
 
-;; This magic number comes from libwayland. TODO Figure out why.
-;; I have a suspicion that this has something to do with the fact
-;; that CMSG_LEN(sizeof(int) * 28) is exactly 128 bytes, but without comments
-;; within the source code, I'll have to ask one of the devs for confirmation.
+;; Some older versions of libwayland reserved a small 128-byte buffer to
+;; receive cmsg data. This can hold at most 28 fds, and as there's no way to
+;; check for limits, and no man page documenting how to recover from a
+;; MSG_CTRUNC, we need to flush once we reach this limit.
+;;
+;; See https://gitlab.freedesktop.org/wayland/wayland commit 73d4a536
 (defconstant +max-fds-out+ 28)
 
 ;; Both sizes must be powers of 2, so that LOGAND can be used to mask the
@@ -247,9 +249,9 @@ Return the number of elements filled."
   (logand (+ length (load-time-value (1- (cffi:foreign-type-size :long))))
           (load-time-value (lognot (1- (cffi:foreign-type-size :long))))))
 
-(defun cmsg-firsthdr (msgh)
+(defun cmsg-firsthdr (msghdr)
   (cffi:with-foreign-slots ((ffi:msg-controllen ffi:msg-control)
-                            msgh (:struct ffi:msghdr))
+                            msghdr (:struct ffi:msghdr))
     (when (plusp ffi:msg-controllen)
       ffi:msg-control)))
 
@@ -388,13 +390,13 @@ Return two values: the number of octets written, and whether the call would have
               ffi:msg-control cmsg
               ffi:msg-controllen (initialize-gather-cmsg cmsg output-fdbuf)))
 
-      (let ((nread (ffi:sendmsg fd msghdr (if nonblocking? '(:dontwait) ())))
-            (errno ffi:*errno*))
+      (let ((nread (ffi:sendmsg fd msghdr (if nonblocking? '(:dontwait) ()))))
         (when (minusp nread)
-          (if (or (eq errno :ewouldblock)
-                  (eq errno :eagain))
-              (return-from %flush-obufs (values 0 t))
-              (error 'socket-stream-error :errno ffi:*errno* :stream socket)))
+          (let ((errno ffi:*errno*))
+            (if (or (eq errno :ewouldblock)
+                    (eq errno :eagain))
+                (return-from %flush-obufs (values 0 t))
+                (error 'socket-stream-error :errno ffi:*errno* :stream socket))))
         (shiftin-ring-buffer output-iobuf nread)
         (values nread nil)))))
 
