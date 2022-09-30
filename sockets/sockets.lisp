@@ -7,12 +7,14 @@
 
 
 
-(defmacro when-debug (&body body)
-  (declare (ignore body)))
+(deftype octet ()
+  '(unsigned-byte 8))
 
-
+(deftype simple-octet-sarray (&optional (size '*))
+  `(simple-array octet (,size)))
 
-;; Ring Buffers
+(deftype c-sized-int ()
+  `(signed-byte #.(* 8 (cffi:foreign-type-size :int))))
 
 ;; Some older versions of libwayland reserved a small 128-byte buffer to
 ;; receive cmsg data. This can hold at most 28 fds, and as there's no way to
@@ -20,211 +22,209 @@
 ;; MSG_CTRUNC, we need to flush once we reach this limit.
 ;;
 ;; See https://gitlab.freedesktop.org/wayland/wayland commit 73d4a536
-(defconstant +max-fds-out+ 28)
+(defconstant +max-fds-out+ 28
+             "Maximum # of file descriptors buffered before each flush")
+(defconstant +buf-size+ 4096
+             "Size, in octets, of all circular buffers")
 
-;; Both sizes must be powers of 2, so that LOGAND can be used to mask the
-;; length of the buffer.
-(defconstant +iobuf-size+ (* 4 4096)
-             "Number of octets to store in a ring buffer")
-(defconstant +fdbuf-size+
-             ;; Lowest power of 2 that fits +max-fds-out+
-             (ash 1 (ceiling (log +max-fds-out+ 2)))
-             "Number of file descriptors to store in a fd buffer")
+;; The circular buffer size must be a power of 2, such that LOGAND can be used
+;; to mod values by the circular buffer length.
+(assert (zerop (logand +buf-size+ (1- +buf-size+))))
 
-(deftype buffer-data () 'cffi:foreign-pointer)
-(deftype buffer-offset () '(unsigned-byte 32))
-(deftype octet () '(unsigned-byte 8))
-(deftype octet-sarray (&optional (size '*))
-  `(simple-array octet (,size)))
-(deftype octet-vector (&optional (size '*))
-  `(vector octet ,size))
+;; The circular buffer size must be able to fit the necessary fd's
+(assert (>= +buf-size+
+            (* +max-fds-out+ (cffi:foreign-type-size :int))))
 
-(defstruct ring-buffer
-  (data  (cffi:null-pointer) :type buffer-data)
-  (cap   0                   :type buffer-offset)
-  (start 0                   :type buffer-offset)
-  (end   0                   :type buffer-offset))
+
 
-(defun allocate-ring-buffer (type size)
-  "Allocate a ring buffer to hold SIZE elements of TYPE. Free with FREE-RING-BUFFER."
-  (make-ring-buffer :data (cffi:foreign-alloc type :count size)
-                    :cap size))
+;; Circular Buffers
 
-(defun free-ring-buffer (buf)
-  (cffi:foreign-free (ring-buffer-data buf))
-  (setf (ring-buffer-data buf) (cffi:null-pointer)))
+;; These circular buffers store a pointer to a foreign array (to be either
+;; shipped out via ffi:sendmsg or filled in via ffi:recvmsg), always of size
+;; +buf-size+, and has heads and tails stored as offsets to the pointer.
 
-(defun clear-ring-buffer (buf)
-  "Reset the ring buffer's head and tail."
-  (setf (ring-buffer-start buf) 0
-        (ring-buffer-end buf) 0)
+(defstruct (circular-buffer (:conc-name #:cb-)
+                            (:print-function nil)
+                            (:predicate nil)
+                            (:copier nil))
+  (ptr (cffi:foreign-alloc :uint8 :count +buf-size+)
+       :type cffi:foreign-pointer)
+  ;; START and END may be incremented beyond +BUF-SIZE+.
+  ;; The real offset is CB-START* and CB-END*.
+  (start 0 :type fixnum)
+  (end 0 :type fixnum))
+
+(declaim (inline cb-start* cb-end* cb-length cb-free-space
+                 cb-clear))
+(defun cb-start* (cb) (logand (cb-start cb) (1- +buf-size+)))
+(defun cb-end* (cb) (logand (cb-end cb) (1- +buf-size+)))
+(defun cb-length (cb) (- (cb-end cb) (cb-start cb)))
+(defun cb-free-space (cb) (+ +buf-size+ (cb-start cb) (- (cb-end cb))))
+
+(defun cb-clear (cb)
+  (setf (cb-start cb) 0
+        (cb-end cb) 0)
   (values))
 
-(declaim (inline ring-buffer-length ring-buffer-empty?
-                 ring-buffer-freespace ring-buffer-full?))
-(defun ring-buffer-length (buf)
-  (- (ring-buffer-end buf) (ring-buffer-start buf)))
-
-(defun ring-buffer-empty? (buf)
-  (= (ring-buffer-end buf) (ring-buffer-start buf)))
-
-(defun ring-buffer-freespace (buf)
-  (- (ring-buffer-cap buf) (ring-buffer-length buf)))
-
-(defun ring-buffer-full? (buf)
-  (= (ring-buffer-cap buf) (ring-buffer-length buf)))
-
-(defun ring-buffer-can-fit? (buf sarray start end)
-  "Return whether a simple octet array can fit inside BUF."
-  (declare (type ring-buffer buf)
-           (type octet-sarray sarray)
-           (type (integer 0) start)
-           (type (or (integer 0) null) end))
-  (setf end (or end (length sarray)))
-  (>= (ring-buffer-freespace buf)
-      (- end start)))
-
-(defun shiftin-ring-buffer (buf count)
-  "Shift the start of the ring buffer by COUNT items."
-  (assert (<= count (ring-buffer-length buf)))
-  (if (= count (ring-buffer-length buf))
-      (clear-ring-buffer buf)
-      (incf (ring-buffer-start buf) count))
+(defun free-circular-buffer (cb)
+  (cffi:foreign-free (cb-ptr cb))
+  (setf (cb-ptr cb) (cffi:null-pointer)
+        (cb-start cb) 0
+        (cb-end cb) 0)
   (values))
 
-(defun shiftout-ring-buffer (buf count)
-  "Shift the end of the ring buffer by COUNT items."
-  (incf (ring-buffer-end buf) count))
+(defun cb-shiftout (cb nbytes)
+  "Mark that the given number of bytes were consumed."
+  (with-accessors ((start cb-start)
+                   (end cb-end)) cb
+    (assert (<= (+ start nbytes) end))
+    (incf start nbytes)
+    (when (= start end)
+      (setf start 0 end 0))
+    (values)))
 
-(defun ring-buffer-push (buf type obj)
-  "Add a single item to the ring buffer."
-  (assert (not (ring-buffer-full? buf)))
-  (with-accessors ((data ring-buffer-data)
-                   (end ring-buffer-end)
-                   (cap ring-buffer-cap)) buf
-    (prog1
-      (setf (cffi:mem-aref data type (logand end (1- cap))) obj)
-      (incf end))))
+(defun cb-shiftin (cb nbytes)
+  "Mark that the given nubmer of bytes were written to the buffer."
+  (with-accessors ((end cb-end)
+                   (length cb-length)) cb
+    (assert (<= (+ length nbytes) +buf-size+))
+    (incf end nbytes)
+    (values)))
 
-(defun ring-buffer-pop (buf type)
-  "Remove and return a single item from the ring buffer."
-  (assert (not (ring-buffer-empty? buf)))
-  (with-accessors ((data ring-buffer-data)
-                   (start ring-buffer-start)
-                   (cap ring-buffer-cap)) buf
-    (prog1
-      (cffi:mem-aref data type (logand start (1- cap)))
-      (incf start))))
-
-(defun ring-buffer-put-sarray (buf sarray start end)
-  "Put the contents of a simple octet array into BUF."
-  (declare (type ring-buffer buf)
-           (type octet-sarray sarray)
-           (type (integer 0) start)
-           (type (or null (integer 0)) end))
-  (let* ((count (- end start))
-         (data (ring-buffer-data buf))
-         (cap (ring-buffer-cap buf))
-         (buf-end (logand (ring-buffer-end buf) (1- cap))))
+(defun cb-push-octets (cb sarray start end)
+  "Push octets from the array to the circular buffer."
+  (declare (type simple-octet-sarray sarray)
+           (type fixnum start end))
+  (when (zerop (length sarray))
+    (return-from cb-push-octets))
+  (let ((n (- end start)))
+    (assert (plusp n))
+    (assert (>= (cb-free-space cb) n))
     (cffi:with-pointer-to-vector-data (carray sarray)
-      (if (<= (+ buf-end count) cap)
-          (ffi:memcpy (cffi:inc-pointer data buf-end) carray count)
-          (let ((size (- cap buf-end)))
-            (ffi:memcpy (cffi:inc-pointer data buf-end) carray size)
-            (ffi:memcpy data (cffi:inc-pointer carray size) (- count size))))
-      (shiftout-ring-buffer buf count)))
+      (if (<= (+ (cb-start* cb) n) +buf-size+)
+          (ffi:memcpy (cffi:inc-pointer (cb-ptr cb) (cb-end* cb))
+                      (cffi:inc-pointer carray start) n)
+          (let ((first-seg (- +buf-size+ (cb-start* cb))))
+            (ffi:memcpy (cffi:inc-pointer (cb-ptr cb) (cb-end* cb))
+                        (cffi:inc-pointer carray start)
+                        first-seg)
+            (ffi:memcpy (cb-ptr cb)
+                        (cffi:inc-pointer carray (+ start first-seg))
+                        (- n first-seg)))))
+    (cb-shiftin cb n)))
+
+(defun cb-pull-octets (cb sarray start end)
+  "Pull octets from the circular buffer to the array."
+  (declare (type simple-octet-sarray sarray)
+           (type fixnum start end))
+  (let ((n (- end start)))
+    (assert (plusp n))
+    (assert (>= (cb-length cb) n))
+    (cffi:with-pointer-to-vector-data (carray sarray)
+      (if (<= (+ (cb-start* cb) n) +buf-size+)
+          (ffi:memcpy carray (cffi:inc-pointer (cb-ptr cb) (cb-start* cb))
+                      n)
+          (let ((first-seg (- +buf-size+ (cb-start* cb))))
+            (ffi:memcpy carray (cffi:inc-pointer (cb-ptr cb) (cb-start* cb))
+                        first-seg)
+            (ffi:memcpy (cffi:inc-pointer carray first-seg)
+                        (cb-ptr cb)
+                        (- n first-seg)))))
+    (cb-shiftout cb n)))
+
+(defun cb-push-int (cb int)
+  (declare (type c-sized-int int))
+  (setf (cffi:mem-ref (cb-ptr cb) :int (cb-end* cb)) int)
+  (cb-shiftin cb (cffi:foreign-type-size :int)))
+
+(defun cb-pull-int (cb)
+  (assert (>= (cb-length cb) (cffi:foreign-type-size :int)))
+  (prog1
+    (cffi:mem-ref (cb-ptr cb) :int (cb-start* cb))
+    (cb-shiftout cb (cffi:foreign-type-size :int))))
+
+(defun cb-push-octet (cb octet)
+  (declare (type octet octet))
+  (setf (cffi:mem-ref (cb-ptr cb) :uint8 (cb-end* cb)) octet)
+  (cb-shiftin cb 1))
+
+(defun cb-pull-octet (cb)
+  (assert (plusp (cb-length cb)))
+  (prog1
+    (cffi:mem-ref (cb-ptr cb) :int (cb-start* cb))
+    (cb-shiftout cb 1)))
+
+(defun cb-copy (cb dest-ptr)
+  "Copy the entire contents of the circular buffer into dest-ptr"
+  (let ((start* (cb-start* cb))
+        (length (cb-length cb)))
+    (if (<= (+ start* length)
+            +buf-size+)
+        (ffi:memcpy dest-ptr (cffi:inc-pointer (cb-ptr cb) start*)
+                    length)
+        (let ((first-seg (- +buf-size+ start*)))
+          (ffi:memcpy dest-ptr (cffi:inc-pointer (cb-ptr cb) start*)
+                      first-seg)
+          (ffi:memcpy (cffi:inc-pointer dest-ptr first-seg)
+                      (cb-ptr cb) (- length first-seg)))))
   (values))
 
-(defun ring-buffer-pull-foreign-array (buf carray count)
-  "Move the contents of the ring buffer into the foreign array."
-  (declare (type ring-buffer buf)
-           (type cffi:foreign-pointer carray)
-           (type (integer 0) count))
-  (let* ((data (ring-buffer-data buf))
-         (cap (ring-buffer-cap buf))
-         (buf-start (logand (ring-buffer-start buf) (1- cap))))
-    (if (<= (+ buf-start count) cap)
-        (ffi:memcpy carray (cffi:inc-pointer data buf-start) count)
-        (let ((size (- cap buf-start)))
-          (ffi:memcpy carray (cffi:inc-pointer data buf-start) size)
-          (ffi:memcpy (cffi:inc-pointer carray size) data (- count size)))))
-  (shiftin-ring-buffer buf count))
+(defun cb-prepare-gather-iovec (cb iov)
+  "Given a pointer to at least two iovecs, point them to filled spaces
+in the circular buffer and return the number of iovecs used."
+  (let ((start (cb-start cb))
+        (end (cb-end cb))
+        (start* (cb-start* cb))
+        (end* (cb-end* cb)))
+    (cond
+      ((= start end)
+       0)
+      ((and (>= start* end*)
+            (plusp start))
+       (cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
+                                 iov (:struct ffi:iovec))
+         (setf ffi:iov-base (cffi:inc-pointer (cb-ptr cb) start*)
+               ffi:iov-len (- +buf-size+ start*)))
+       (cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
+                                 (cffi:mem-aptr iov '(:struct ffi:iovec) 1)
+                                 (:struct ffi:iovec))
+         (setf ffi:iov-base (cb-ptr cb)
+               ffi:iov-len end*))
+       2)
+      ((cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
+                                 iov (:struct ffi:iovec))
+         (setf ffi:iov-base (cffi:inc-pointer (cb-ptr cb) start*)
+               ffi:iov-len (- (if (plusp end*) end* +buf-size+) start*)))
+       1))))
 
-(defun ring-buffer-pull-sarray (buf sarray start end)
-  "Pull the contents of the ring buffer into the simple octet array."
-  (declare (type ring-buffer buf)
-           (type octet-sarray sarray)
-           (type (integer 0) start)
-           (type (integer 0) end))
-  (cffi-sys:with-pointer-to-vector-data (carray sarray)
-    (ring-buffer-pull-foreign-array buf (cffi:inc-pointer carray start)
-                                    (- end start))))
-
-(defun initialize-gather-iovec (iov buf)
-  "Fill up to 2 elements of an unsized iovec array with filled buffer data, intended for a write operation.
-Return the number of elements filled."
-  (let* ((cap (ring-buffer-cap buf))
-         (start (logand (ring-buffer-start buf) (1- cap)))
-         (end (logand (ring-buffer-end buf) (1- cap)))
-         (data (ring-buffer-data buf)))
-    (cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
-                              iov (:struct ffi:iovec))
-      (cond
-        ((<= start end)
-         ;; 1 vector from start to end
-         (setf ffi:iov-base (cffi:mem-aptr data :uint8 start)
-               ffi:iov-len (- end start))
-         1)
-        ((zerop end)
-         ;; 1 vector from start to cap
-         (setf ffi:iov-base (cffi:mem-aptr data :uint8 start)
-               ffi:iov-len (- cap start))
-         1)
-        (t
-         ;; 2 vectors from start to cap, then 0 to end
-         (setf ffi:iov-base (cffi:mem-aptr data :uint8 start)
-               ffi:iov-len (- cap start)
-               (cffi:foreign-slot-value
-                 (cffi:mem-aptr iov '(:struct ffi:iovec) 1)
-                 '(:struct ffi:iovec) 'ffi:iov-base) data
-               (cffi:foreign-slot-value
-                 (cffi:mem-aptr iov '(:struct ffi:iovec) 1)
-                 '(:struct ffi:iovec) 'ffi:iov-len) end)
-         2)))))
-
-;; Iovec operations are solely for octet ring buffers.
-
-(defun initialize-scatter-iovec (iov buf)
-  "Fill up to 2 elements of an unsized iovec array with unset buffered data, intended for a read operation.
-Return the number of elements filled."
-  (let* ((cap (ring-buffer-cap buf))
-         (start (logand (ring-buffer-start buf) (1- cap)))
-         (end (logand (ring-buffer-end buf) (1- cap)))
-         (data (ring-buffer-data buf)))
-    (cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
-                              iov (:struct ffi:iovec))
-      (cond
-        ((< end start)
-         ;; 1 vector from end to start
-         (setf ffi:iov-base (cffi:mem-aptr data :uint8 end)
-               ffi:iov-len (- start end))
-         1)
-        ((zerop start)
-         ;; 1 vector from end to cap
-         (setf ffi:iov-base (cffi:mem-aptr data :uint8 end)
-               ffi:iov-len (- cap end))
-         1)
-        (t
-         ;; 2 vectors from end to cap, then 0 to start
-         (setf ffi:iov-base (cffi:mem-aptr data :uint8 end)
-               ffi:iov-len (- cap end)
-               (cffi:foreign-slot-value
-                 (cffi:mem-aptr iov '(:struct ffi:iovec) 1)
-                 '(:struct ffi:iovec) 'ffi:iov-base) data
-               (cffi:foreign-slot-value
-                 (cffi:mem-aptr iov '(:struct ffi:iovec) 1)
-                 '(:struct ffi:iovec) 'ffi:iov-len) start)
-         2)))))
+(defun cb-prepare-scatter-iovec (cb iov)
+  "Given a pointer to at least two iovecs, point them to empty spaces
+in the circular buffer and return the number of iovecs used."
+  (let ((start (cb-start cb))
+        (end (cb-end cb))
+        (start* (cb-start* cb))
+        (end* (cb-end* cb)))
+    (cond
+      ((and (< start end)
+            (= start* end*))
+       0)
+      ((or (> start* end*)
+           (zerop start))
+       (cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
+                                 iov (:struct ffi:iovec))
+         (setf ffi:iov-base (cffi:inc-pointer (cb-ptr cb) end*)
+               ffi:iov-len (- (if (plusp start*) start* +buf-size+) end*)))
+       1)
+      ((cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
+                                 iov (:struct ffi:iovec))
+         (setf ffi:iov-base (cffi:inc-pointer (cb-ptr cb) end*)
+               ffi:iov-len (- +buf-size+ end*)))
+       (cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
+                                 (cffi:mem-aptr iov '(:struct ffi:iovec) 1)
+                                 (:struct ffi:iovec))
+         (setf ffi:iov-base (cb-ptr cb)
+               ffi:iov-len start*))
+       2))))
 
 
 
@@ -283,14 +283,14 @@ Return the number of elements filled."
 (defclass local-socket-stream (gray:fundamental-binary-input-stream
                                gray:fundamental-binary-output-stream)
   ((fd :initarg :fd :type (or (integer 0) null))
-   (input-iobuf :initform (allocate-ring-buffer :uint8 +iobuf-size+)
-                :type (or ring-buffer null))
-   (output-iobuf :initform (allocate-ring-buffer :uint8 +iobuf-size+)
-                 :type (or ring-buffer null))
-   (input-fdbuf :initform (allocate-ring-buffer :int +fdbuf-size+)
-                :type (or ring-buffer null))
-   (output-fdbuf :initform (allocate-ring-buffer :int +fdbuf-size+)
-                 :type (or ring-buffer null))
+   (input-iobuf :initform (make-circular-buffer)
+                :type (or circular-buffer null))
+   (output-iobuf :initform (make-circular-buffer)
+                 :type (or circular-buffer null))
+   (input-fdbuf :initform (make-circular-buffer)
+                :type (or circular-buffer null))
+   (output-fdbuf :initform (make-circular-buffer)
+                 :type (or circular-buffer null))
    (dirty? :initform nil :type boolean :reader %dirty?))
   (:documentation
     "A binary local socket stream that can send file descriptors."))
@@ -347,19 +347,15 @@ Return the number of elements filled."
   "Build the control message and return the real length."
   (let* ((cmsghdr cmsg)
          (cmsgdata (cmsg-data cmsg))
-         (nfds (ring-buffer-length output-fdbuf))
-         (length (* nfds (cffi:foreign-type-size :int))))
-    (if (plusp nfds)
+         (length (cb-length output-fdbuf)))
+    (if (plusp length)
         (progn
           (cffi:with-foreign-slots ((ffi:cmsg-level ffi:cmsg-type ffi:cmsg-len)
                                     cmsghdr (:struct ffi:cmsghdr))
             (setf ffi:cmsg-level ffi:+sol-socket+
                   ffi:cmsg-type ffi:+scm-rights+
                   ffi:cmsg-len (+ length (cffi:foreign-type-size '(:struct ffi:cmsghdr)))))
-          ;; TODO rig RING-BUFFER-PULL-x to handle fd-sized buffers
-          (dotimes (i nfds)
-            (setf (cffi:mem-aref cmsgdata :int i)
-                  (ring-buffer-pop output-fdbuf :int)))
+          (cb-copy output-fdbuf cmsgdata)
           (cmsg-len length))
         0)))
 
@@ -368,14 +364,14 @@ Return the number of elements filled."
 Return two values: the number of octets written, and whether the call would have been blocked if NONBLOCKING? was NIL."
   (declare (optimize debug))
   (with-slots (fd output-iobuf output-fdbuf) socket
-    (when (ring-buffer-empty? output-iobuf)
-      ;; TODO FIXME: If there's no iovec data, sendmsg() essentially no-ops.
+    (when (zerop (cb-length output-iobuf))
+      ;; FIXME: If there's no iovec data, sendmsg() essentially no-ops.
       ;; The same issue is found in iolib. This shouldn't be a problem for
       ;; Wayland since every fd sent is part of a greater message, but if this
       ;; is moved to a general-purpose library, this surprising behavior
       ;; *needs* to be addressed.
-      (unless (ring-buffer-empty? output-fdbuf)
-        (error "Flushing ring buffer without I/O data."))
+      (when (plusp (cb-length output-fdbuf))
+        (error "Flushing buffer without I/O data."))
       (return-from %flush-obufs (values 0 nil)))
 
     (cffi:with-foreign-objects ((msghdr '(:struct ffi:msghdr))
@@ -386,7 +382,7 @@ Return two values: the number of octets written, and whether the call would have
                                              ffi:msg-controllen)
                                 msghdr (:struct ffi:msghdr))
         (setf ffi:msg-iov iov
-              ffi:msg-iovlen (initialize-gather-iovec iov output-iobuf)
+              ffi:msg-iovlen (cb-prepare-gather-iovec output-iobuf iov)
               ffi:msg-control cmsg
               ffi:msg-controllen (initialize-gather-cmsg cmsg output-fdbuf)))
 
@@ -397,27 +393,31 @@ Return two values: the number of octets written, and whether the call would have
                     (eq errno :eagain))
                 (return-from %flush-obufs (values 0 t))
                 (error 'socket-stream-error :errno ffi:*errno* :stream socket))))
-        (shiftin-ring-buffer output-iobuf nread)
+        (cb-clear output-fdbuf)
+        (cb-shiftout output-iobuf nread)
         (values nread nil)))))
 
 (defun %flush-obufs-if-needed (socket)
   (with-slots (output-iobuf dirty?) socket
-    (unless (or dirty? (ring-buffer-full? output-iobuf))
+    (unless (or dirty? (= (cb-length output-iobuf)
+                          +buf-size+))
       (%flush-obufs socket nil)
       (setf dirty? nil))))
 
 (defun %write-sarray (socket sarray start end)
   (declare (type local-socket-stream socket)
-           (type octet-sarray sarray)
+           (type simple-octet-sarray sarray)
            (type fixnum start)
            (type (or fixnum null) end))
+  (setf end (or end (length sarray)))
   (with-slots (output-iobuf) socket
-    (unless (ring-buffer-can-fit? output-iobuf sarray start end)
+    (unless (>= (cb-free-space output-iobuf)
+                (- end start))
       (%flush-obufs socket nil))
-    (ring-buffer-put-sarray output-iobuf sarray start end)))
+    (cb-push-octets output-iobuf sarray start end)))
 
 (defun %write-vector (socket vector start end)
-  (%write-sarray socket (coerce vector 'octet-sarray) start end))
+  (%write-sarray socket (coerce vector 'simple-octet-sarray) start end))
 
 
 
@@ -433,7 +433,7 @@ Return two values: the number of octets read, and whether the call would have be
       (cffi:with-foreign-slots ((ffi:msg-iov ffi:msg-iovlen)
                                 iov (:struct ffi:msghdr))
         (setf ffi:msg-iov iov
-              ffi:msg-iovlen (initialize-scatter-iovec iov input-iobuf)))
+              ffi:msg-iovlen (cb-prepare-scatter-iovec input-iobuf iov)))
       ;; TODO fill in cmsg to read fd's here
 
       (let ((nread (ffi:recvmsg fd msghdr (if nonblocking? '(:dontwait) ()))))
@@ -443,36 +443,26 @@ Return two values: the number of octets read, and whether the call would have be
                     (eq errno :eagain))
                 (return-from %read-once (values 0 t))
                 (error 'socket-stream-error :errno ffi:*errno* :stream socket))))
-        (shiftout-ring-buffer input-iobuf nread)
+        (cb-shiftin input-iobuf nread)
         (values nread nil)))))
 
 (defun %read-into-sarray (socket sarray start end)
   (declare (type local-socket-stream socket)
-           (type octet-sarray sarray)
+           (type simple-octet-sarray sarray)
            (type (integer 0) start)
            (type (or null (integer 0)) end))
+  (setf end (or end (length sarray)))
   (loop :with iobuf := (slot-value socket 'input-iobuf)
         :with octets-left := (- end start)
         :with offset := start
-        :for size := (min octets-left (ring-buffer-length iobuf))
+        :for size := (min octets-left (cb-length iobuf))
         :when (plusp size)
-        :do (ring-buffer-pull-sarray iobuf sarray offset (+ offset size))
+        :do (cb-pull-octets iobuf sarray offset (+ offset size))
             (incf offset size)
             (decf octets-left size)
         :until (or (zerop octets-left)
                    (zerop (%read-once socket nil)))
         :finally (return offset)))
-
-(defun %read-into-vector (socket vector start end)
-  (declare (type local-socket-stream socket)
-           (type vector vector)
-           (type (integer 0) start)
-           (type (or null (integer 0)) end))
-  (loop :for i :from start :below end
-        :for octet := (gray:stream-read-byte socket)
-        :until (eq octet :eof)
-        :do (setf (aref vector i) octet)
-        :finally (return i)))
 
 
 
@@ -489,24 +479,24 @@ Return two values: the number of octets read, and whether the call would have be
   "Send some buffered output to the socket, but don't wait."
   (%flush-obufs stream t)
   (with-slots (output-iobuf dirty?) stream
-    (unless (ring-buffer-empty? output-iobuf)
+    (when (plusp (cb-length output-iobuf))
       (setf dirty? t)))
   nil)
 
 (defmethod gray:stream-clear-output ((stream local-socket-stream))
   "Clear all outstanding output operations, including byte and fd I/O."
   (with-slots (output-iobuf output-fdbuf dirty?) stream
-    (clear-ring-buffer output-iobuf)
-    (clear-ring-buffer output-fdbuf)
+    (cb-clear output-iobuf)
+    (cb-clear output-fdbuf)
     (setf dirty? nil)))
 
 (defmethod gray:stream-clear-input ((stream local-socket-stream))
   "Clear all buffered I/O and file descriptor input."
   (with-slots (input-iobuf input-fdbuf) stream
-    (loop :until (ring-buffer-empty? input-fdbuf)
-          :for fd := (ring-buffer-pop input-fdbuf :int)
+    (loop :while (plusp (cb-length input-fdbuf))
+          :for fd := (cb-pull-int input-fdbuf)
           :do (ffi:close fd))
-    (clear-ring-buffer input-iobuf)))
+    (cb-clear input-iobuf)))
 
 (defmethod close ((socket local-socket-stream) &key abort)
   (when (and (%dirty? socket) (not abort))
@@ -515,10 +505,10 @@ Return two values: the number of octets read, and whether the call would have be
     (gray:stream-clear-input socket)
     (gray:stream-clear-output socket)
 
-    (when input-iobuf (free-ring-buffer input-iobuf))
-    (when output-iobuf (free-ring-buffer output-iobuf))
-    (when input-fdbuf (free-ring-buffer input-fdbuf))
-    (when output-fdbuf (free-ring-buffer output-fdbuf))
+    (when input-iobuf (free-circular-buffer input-iobuf))
+    (when output-iobuf (free-circular-buffer output-iobuf))
+    (when input-fdbuf (free-circular-buffer input-fdbuf))
+    (when output-fdbuf (free-circular-buffer output-fdbuf))
     (setf input-iobuf nil output-iobuf nil
           input-fdbuf nil output-fdbuf nil)
 
@@ -536,33 +526,31 @@ Return two values: the number of octets read, and whether the call would have be
   (check-type byte octet)
   (%flush-obufs-if-needed stream)
   (with-slots (output-iobuf) stream
-    (ring-buffer-push output-iobuf :uint8 byte)))
+    (cb-push-octet output-iobuf byte)))
 
 (defmethod gray:stream-write-sequence ((stream local-socket-stream) sequence start end &key)
   (etypecase sequence
     ;; Fast-io uses simple octet arrays, so let's specialize on that, and
     ;; fallback to generic vectors as a workaround.
     ;; This socket is binary-only, so no strings or characters here.
-    (octet-sarray (%write-sarray stream sequence start end))
+    (simple-octet-sarray (%write-sarray stream sequence start end))
     (vector (%write-vector stream sequence start end))))
 
 (defmethod gray:stream-read-byte ((stream local-socket-stream))
   (with-slots (input-iobuf) stream
-    (when (ring-buffer-empty? input-iobuf)
+    (unless (plusp (cb-length input-iobuf))
       (let ((nread (%read-once stream nil)))
         (when (zerop nread)
-              (return-from sb-gray:stream-read-byte :eof))))
-
-    (ring-buffer-pop input-iobuf :uint8)))
+          (return-from gray:stream-read-byte :eof))))
+    (cb-pull-octet input-iobuf)))
 
 (defmethod gray:stream-read-sequence ((stream local-socket-stream) sequence start end &key)
-  (etypecase sequence
-    (octet-sarray (%read-into-sarray stream sequence start end))
-    (vector (%read-into-vector stream sequence start end))))
+  (check-type sequence simple-octet-sarray)
+  (%read-into-sarray stream sequence start end))
 
 (defmethod gray:stream-listen ((stream local-socket-stream))
   (with-slots (input-iobuf) stream
-    (or (not (ring-buffer-empty? input-iobuf))
+    (or (plusp (cb-length input-iobuf))
         (plusp (%read-once stream t)))))
 
 (defun write-fd (socket fd)
@@ -571,14 +559,15 @@ Like binary I/O, fd's may be buffered and affected by FINISH-OUTPUT, FORCE-OUTPU
   (check-type socket local-socket-stream)
   (check-type fd (integer 0))
   (with-slots (output-fdbuf) socket
-    (when (= (ring-buffer-length output-fdbuf) +max-fds-out+)
+    (when (= (cb-length output-fdbuf)
+             (* +max-fds-out+ (cffi:foreign-type-size :int)))
       (%flush-obufs socket nil))
-    (ring-buffer-push output-fdbuf :int fd)))
+    (cb-push-int output-fdbuf fd)))
 
 (defun read-fd (socket)
   "Pop a buffered file descriptor or return NIL.
 Like binary I/O, buffered fd's may be affected by CLEAR-INPUT."
   (check-type socket local-socket-stream)
   (with-slots (input-fdbuf) socket
-    (unless (ring-buffer-empty? input-fdbuf)
-      (ring-buffer-pop input-fdbuf :int))))
+    (when (plusp (cb-length input-fdbuf))
+      (cb-pull-int input-fdbuf))))
