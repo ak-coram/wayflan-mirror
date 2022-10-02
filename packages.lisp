@@ -33,10 +33,6 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 
 The wayland-wire package defines utilities for communicating primitive data through a fast-io buffer connected to a Wayland UNIX socket stream."))
 
-(defpackage #:xyz.shunter.wayflan.socket
-  (:use #:cl)
-  (:local-nicknames (#:a #:alexandria)))
-
 (defpackage #:xyz.shunter.wayflan.client
   (:nicknames #:wayflan-client)
   (:use #:cl)
@@ -71,7 +67,6 @@ The wayland-wire package defines utilities for communicating primitive data thro
            #:handle-event
 
            #:find-proxy
-           #:make-proxy
            #:destroy-proxy
 
            #:display-pathname
@@ -80,9 +75,6 @@ The wayland-wire package defines utilities for communicating primitive data thro
            #:wl-display-listen
            #:wl-display-dispatch-event
            #:wl-display-roundtrip
-
-           #:write-arg
-           #:read-arg
 
            #:define-interface
            #:define-enum

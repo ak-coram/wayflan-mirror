@@ -97,12 +97,6 @@ Executes the body with DISPLAY bound to a freshly connected display."
 (defmethod handle-event ((app superapp) sender (event xdg:xdg-toplevel.close-event))
   (signal 'close-app))
 
-(defmethod handle-event :before ((app superapp) sender event)
-  ;; Report all events to output for debugging.
-  (unless (typep event 'wl-registry.global-event)
-    ;;(format t "Handling ~A for ~S~%" (class-of event) sender)
-    ))
-
 (defmethod handle-event ((app superapp) registry (event wl-registry.global-event))
   (with-accessors ((name wl-event-name)
                    (interface wl-event-interface)

@@ -8,12 +8,11 @@
   :author "Samuel Hunter"
   :license "Proprietary"
 
-  :description "Local socket interface for Wayland connections"
+  :description "Local socket interface optimized Wayland connections"
 
   :defsystem-depends-on (#:cffi-grovel)
   :depends-on (#:alexandria
                #:cffi
-               #:cffi-libffi
                #:trivial-gray-streams)
   :pathname #P"sockets/"
   :serial t
@@ -31,7 +30,7 @@
   :author "Samuel Hunter"
   :license "Proprietary"
 
-  :description "Wayland implementation for clients (TODO: and servers)"
+  :description "Wayland protocol implementation for clients"
 
   :depends-on (#:alexandria
                #:closer-mop
@@ -61,7 +60,7 @@
   :author "Samuel Hunter"
   :license "Proprietary"
 
-  :description "Test sute for wayflan"
+  :description "Test suite for wayflan"
 
   :depends-on (#:wayflan
                #:alexandria

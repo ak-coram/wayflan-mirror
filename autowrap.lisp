@@ -191,7 +191,9 @@
        ,@(a:when-let ((summary (summary* dom-request)))
            `((:documentation ,summary)))
        ,@(a:when-let ((type (dom:attribute dom-request "type")))
-           `((:type ,(a:make-keyword (lispify type))))))))
+           `((:type ,(a:make-keyword (lispify type)))))
+       ,@(a:when-let ((since (dom:attribute dom-request "since")))
+           `((:since ,(parse-integer since)))))))
 
 (defun transform-event (dom-event interface-event interface opcode)
   (let ((name (event-name interface dom-event)))
@@ -201,7 +203,9 @@
              (args dom-event))
        (:event-superclasses ,interface-event)
        ,@(a:when-let ((summary (summary* dom-event)))
-           `((:documentation ,summary))))))
+           `((:documentation ,summary)))
+       ,@(a:when-let ((since (dom:attribute dom-event "since")))
+           `((:since ,(parse-integer since)))))))
 
 (defun transform-enum (dom-enum interface)
   (let ((name (enum-name interface dom-enum)))
