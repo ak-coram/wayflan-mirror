@@ -1,4 +1,4 @@
-;;; examples/wayland-book-port.lisp
+;;; examples/checkerboxed-demo.lisp
 ;;;
 ;;; This program is a rewrite of the extended example code found in Drew
 ;;; Devault's The Wayland Protocol, §7.3 thru §8.2. The program creates
@@ -7,50 +7,15 @@
 ;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>
 ;;; All rights reserved.
 
-(require :wayflan)
-(require :posix-shm)
-
-(defpackage #:xyz.shunter.wayflan.client.examples.wayland-book-port
+(defpackage #:xyz.shunter.wayflan.examples.checkerboxed-demo
   (:use #:cl
         #:wayflan-client
         #:wayflan-client.xdg-shell)
   (:local-nicknames (#:a #:alexandria)
-                    (#:shm #:posix-shm)))
+                    (#:shm #:posix-shm))
+  (:export #:run))
 
-(in-package #:xyz.shunter.wayflan.client.examples.wayland-book-port)
-
-
-
-(defconstant +most-positive-wl-int+ (1- (ash 1 31)))
-
-(defmacro with-open-display ((display &rest options) &body body)
-  "Like WITH-OPEN-FILE, but binding DISPLAY to the result of WL-DISPLAY-CONNECT instead of OPEN.
-Executes the body with DISPLAY bound to a freshly connected display."
-  `(let ((,display (wl-display-connect ,@options)))
-     (unwind-protect
-       (progn ,@body)
-       (wl-display-disconnect ,display))))
-
-(defmacro with-proxy ((var value) &body body)
-  "Bind the proxy variable VAR to VALUE, and destroy it when execution leaves the body."
-  `(let ((,var ,value))
-     (unwind-protect (progn ,@body)
-       (destroy-proxy ,var))))
-
-(defmacro event-case (event &body clauses)
-  (a:once-only (event)
-    `(case (car ,event)
-       ,@(mapcar (lambda (clause)
-                   (destructuring-bind (event-name lambda-list &body body) clause
-                     `(,event-name
-                        (destructuring-bind ,lambda-list (rest ,event)
-                          ,@body))))
-                 clauses))))
-
-(defmacro elambda (&body clauses)
-  (a:with-gensyms (event)
-    `(lambda (&rest ,event)
-       (event-case ,event ,@clauses))))
+(in-package #:xyz.shunter.wayflan.examples.checkerboxed-demo)
 
 
 
@@ -97,14 +62,15 @@ Executes the body with DISPLAY bound to a freshly connected display."
                       #xff666666
                       #xffeeeeee))))
 
-        (push (elambda
+        (push (evelambda
                 (:release ()
+                 ;; Sent by the compositor when it's no longer using this buffer.
                  (destroy-proxy buffer)))
               (wl-proxy-hooks buffer))
         buffer))))
 
 (defun handle-frame-callback (app callback &rest event)
-  (event-case event
+  (event-ecase event
     (:done (time)
      (with-slots (last-frame offset wl-surface) app
        ;; Destroy this callback
@@ -144,7 +110,7 @@ Executes the body with DISPLAY bound to a freshly connected display."
          (xdg-wm-base
            (setf xdg-wm-base (wl-registry.bind
                                registry name 'xdg-wm-base 1))
-           (push (elambda
+           (push (evelambda
                    (:ping (serial)
                     (xdg-wm-base.pong xdg-wm-base serial)))
                  (wl-proxy-hooks xdg-wm-base))))))))
@@ -164,10 +130,11 @@ Executes the body with DISPLAY bound to a freshly connected display."
               xdg-surface (xdg-wm-base.get-xdg-surface
                             xdg-wm-base wl-surface)
               xdg-toplevel (xdg-surface.get-toplevel xdg-surface))
-        (push (elambda
-                (:close () (throw :close-app (values))))
+        (push (evlambda
+                (:close ()
+                 (return-from run)))
               (wl-proxy-hooks xdg-toplevel))
-        (push (elambda
+        (push (evelambda
                 (:configure (serial)
                  (xdg-surface.ack-configure xdg-surface serial)
                  (let ((buffer (draw-frame app)))
@@ -181,5 +148,4 @@ Executes the body with DISPLAY bound to a freshly connected display."
           (push (a:curry 'handle-frame-callback app cb)
                 (wl-proxy-hooks cb)))
 
-        (catch :close-app
-               (loop (wl-display-dispatch-event display)))))))
+        (loop (wl-display-dispatch-event display))))))

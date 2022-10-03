@@ -4,10 +4,9 @@
 ;;; All rights reserved.
 
 (in-package #:xyz.shunter.wayflan.client)
+(declaim (optimize debug))
 
 
-
-(declaim (optimize debug))
 
 ;; Wayland Interface
 
@@ -582,3 +581,50 @@ OPTIONS:
                        `(%read-arg ,type ,proxy ,buffer))
                      arg-specifiers)))
          ',name))))
+
+
+
+;; Utility Macros
+
+(defmacro with-open-display ((display &rest options) &body body)
+  "Like WITH-OPEN-FILE, but binding DISPLAY to the result of WL-DISPLAY-CONNECT instead of OPEN.
+Executes the body with DISPLAY bound to a freshly connected display."
+  `(let ((,display (wl-display-connect ,@options)))
+     (unwind-protect
+       (progn ,@body)
+       (wl-display-disconnect ,display))))
+
+(defmacro with-proxy ((var value) &body body)
+  "Bind the proxy variable VAR to VALUE, and destroy it when execution leaves the body."
+  `(let ((,var ,value))
+     (unwind-protect (progn ,@body)
+       (destroy-proxy ,var))))
+
+(defmacro %event-xcase (xcase event &body clauses)
+  (a:once-only (event)
+    `(,xcase (car ,event)
+       ,@(mapcar (lambda (clause)
+                   (destructuring-bind (event-name lambda-list &body body) clause
+                     `(,event-name
+                        (destructuring-bind ,lambda-list (rest ,event)
+                          ,@body))))
+                 clauses))))
+
+(defmacro event-case (event &body clauses)
+  `(%event-xcase case ,event ,@clauses))
+(defmacro event-ccase (event &body clauses)
+  `(%event-xcase ccase ,event ,@clauses))
+(defmacro event-ecase (event &body clauses)
+  `(%event-xcase ecase ,event ,@clauses))
+
+(defmacro evxlambda (event-xcase &body clauses)
+  (a:with-gensyms (event)
+    `(lambda (&rest ,event)
+       (,event-xcase ,event ,@clauses))))
+
+(defmacro evlambda (&body clauses)
+  `(evxlambda event-case ,@clauses))
+(defmacro evclambda (&body clauses)
+  `(evxlambda event-ccase ,@clauses))
+(defmacro evelambda (&body clauses)
+  `(evxlambda event-ecase ,@clauses))

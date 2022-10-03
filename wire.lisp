@@ -20,6 +20,10 @@
 (deftype wl-uint ()
   '(unsigned-byte 32))
 
+(defconstant +most-positive-wl-uint+ (1- (ash 1 32)))
+(defconstant +most-positive-wl-int+ (1- (ash 1 31)))
+(defconstant +most-negative-wl-int+ (- (ash 1 31)))
+
 (declaim (inline make-octet-vector padding))
 
 (defun make-octet-vector (size)

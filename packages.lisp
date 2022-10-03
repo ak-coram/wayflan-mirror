@@ -9,6 +9,9 @@
                     (#:a #:alexandria))
   (:export #:wl-int
            #:wl-uint
+           #:+most-positive-wl-uint+
+           #:+most-positive-wl-int+
+           #:+most-negative-wl-int+
 
            #:read-wl-int
            #:read-wl-uint
@@ -40,6 +43,10 @@ The wayland-wire package defines utilities for communicating primitive data thro
                     (#:io #:fast-io)
                     (#:wire #:xyz.shunter.wayflan.wire)
                     (#:sock #:xyz.shunter.wayflan.sockets))
+  (:import-from #:xyz.shunter.wayflan.wire
+                #:+most-positive-wl-uint+
+                #:+most-positive-wl-int+
+                #:+most-negative-wl-int+)
   (:export #:wl-interface
            #:wl-interface-version
            #:wl-interface-name
@@ -72,7 +79,20 @@ The wayland-wire package defines utilities for communicating primitive data thro
            #:define-interface
            #:define-enum
            #:define-request
-           #:define-event)
+           #:define-event
+
+           #:+most-positive-wl-uint+
+           #:+most-positive-wl-int+
+           #:+most-negative-wl-int+
+
+           #:with-open-display
+           #:with-proxy
+           #:event-case
+           #:event-ccase
+           #:event-ecase
+           #:evlambda
+           #:evclambda
+           #:evelambda)
   (:documentation "Wayland client and core protocol implementation.
 
 Wayland is a protocol for a compositor to talk to its clients.

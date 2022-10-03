@@ -55,12 +55,32 @@
 
   :in-order-to ((test-op (test-op :wayflan/test))))
 
+(defsystem #:wayflan/examples
+  :version "0.0.0"
+  :author "Samuel Hunter"
+  :license "Proprietary"
+
+  :description "Example suite for Wayflan"
+
+  :depends-on (#:wayflan
+               #:posix-shm
+               #:cl-colors
+               #:cl-cairo2
+               #:cl-pango)
+  :pathname #P"examples/"
+  :serial nil
+  :components ((:file "global-info")
+               (:file "checkerboxed-demo")
+               (:static-file "lisplogo_256.png")
+               (:file "cairo-demo"
+                      :depends-on ("lisplogo_256.png"))))
+
 (defsystem #:wayflan/test
   :version "0.0.0"
   :author "Samuel Hunter"
   :license "Proprietary"
 
-  :description "Test suite for wayflan"
+  :description "Test suite for Wayflan"
 
   :depends-on (#:wayflan
                #:alexandria
@@ -69,9 +89,9 @@
 
   :pathname #P"test/"
   :serial nil
-  :components ((:file #:test)
-               (:file #:wire)
-               (:file #:client))
+  :components ((:file "test")
+               (:file "wire")
+               (:file "client"))
 
   :perform (test-op (op c)
              (uiop:symbol-call :parachute :test :xyz.shunter.wayflan.test)))
