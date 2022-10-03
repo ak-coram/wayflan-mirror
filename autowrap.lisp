@@ -124,10 +124,8 @@
 (defun request-name (interface-name dom-request)
   (intern (dot interface-name (name dom-request))))
 
-(defun event-name (interface-name dom-event)
-  (intern (dot interface-name
-               (name dom-event)
-               '#:event)))
+(defun event-name (dom-event)
+  (a:make-keyword (string-upcase (name dom-event))))
 
 (defun enum-name (interface-name dom-enum)
   (intern (dot interface-name (name dom-enum))))
@@ -136,10 +134,7 @@
   (intern (muff (dot interface-name
                      (name dom-enum) (name dom-entry)))))
 
-(defun event-arg-name (dom-arg)
-  (intern (hyphenize '#:wl-event (name dom-arg))))
-
-(defun request-arg-name (dom-arg)
+(defun arg-name (dom-arg)
   (intern (lispify (name dom-arg))))
 
 (defun arg-type (dom-arg)
@@ -168,16 +163,10 @@
     ("array" :array)
     ("fd" :fd)))
 
-(defun transform-arg (dom-arg &key event-p)
-  (let ((name (if event-p
-                  (event-arg-name dom-arg)
-                  (request-arg-name dom-arg))))
-    (when event-p
-      (pushnew name *syms-to-export*))
+(defun transform-arg (dom-arg)
+  (let ((name (arg-name dom-arg)))
     `(,name
        :type ,(arg-type dom-arg)
-       ,@(when event-p
-           `(:initarg ,(a:make-keyword (lispify (name dom-arg)))))
        ,@(a:when-let ((summary (summary* dom-arg)))
            `(:documentation ,summary)))))
 
@@ -186,7 +175,7 @@
     (pushnew name *syms-to-export*)
 
     `(client:define-request ,(list name interface opcode)
-       ,(map 'list (a:rcurry #'transform-arg :event-p nil)
+       ,(map 'list 'transform-arg
              (args dom-request))
        ,@(a:when-let ((summary (summary* dom-request)))
            `((:documentation ,summary)))
@@ -195,13 +184,11 @@
        ,@(a:when-let ((since (dom:attribute dom-request "since")))
            `((:since ,(parse-integer since)))))))
 
-(defun transform-event (dom-event interface-event interface opcode)
-  (let ((name (event-name interface dom-event)))
-    (pushnew name *syms-to-export*)
+(defun transform-event (dom-event interface opcode)
+  (let ((name (event-name dom-event)))
     `(client:define-event ,(list name interface opcode)
-       ,(map 'list (a:rcurry #'transform-arg :event-p t)
+       ,(map 'list 'transform-arg
              (args dom-event))
-       (:event-superclasses ,interface-event)
        ,@(a:when-let ((summary (summary* dom-event)))
            `((:documentation ,summary)))
        ,@(a:when-let ((since (dom:attribute dom-event "since")))
@@ -226,19 +213,16 @@
 (defun transform-interface (dom-interface)
   (let ((name (interface-name dom-interface))
         (version (parse-integer (version dom-interface)))
-        (event-name (interface-event-name dom-interface))
         (requests (requests dom-interface))
         (events (events dom-interface))
         (enums (enums dom-interface)))
     (pushnew name *syms-to-export*)
-    (pushnew event-name *syms-to-export*)
 
     `((client:define-interface ,name ()
         ,@(when (member name *exclude-defclasses*
                         :test #'string=)
             `((:skip-defclass t)))
         (:version ,version)
-        (:event-class ,event-name)
 
         (:interface-name ,(name dom-interface))
         ,@(a:when-let ((summary (summary* dom-interface)))
@@ -258,7 +242,7 @@
        ,@(let ((opcode -1))
            (map 'list
                 (lambda (dom-event)
-                  (transform-event dom-event event-name name (incf opcode)))
+                  (transform-event dom-event name (incf opcode)))
                 events)))))
 
 (defun transform-protocol (dom-protocol)

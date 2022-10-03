@@ -36,10 +36,10 @@
    (wl-interface-name (find-class interface))))
 
 (defclass wl-interface (standard-class)
-  ((version :initarg :version :type (integer 0)
-            :reader wl-interface-version)
-   (interface-name :initarg :interface-name :type string
-                   :reader wl-interface-name)))
+  ((%version :initarg :version :type (integer 0)
+             :reader wl-interface-version)
+   (%interface-name :initarg :interface-name :type string
+                    :reader wl-interface-name)))
 
 (defmethod closer-mop:validate-superclass ((class wl-interface)
                                            (superclass standard-class))
@@ -63,8 +63,8 @@
              :accessor %wl-proxy-display)
    (%version :initarg :version
              :reader wl-proxy-version)
-   (%listeners :initform ()
-               :accessor wl-proxy-listeners)
+   (%hooks :initform ()
+           :accessor wl-proxy-hooks)
    (%deletedp :initform nil
               :reader deletedp))
   (:documentation "A protocol object on the client side"))
@@ -87,11 +87,6 @@
   ()
   (:documentation "A proxy that has since been deleted by the compositor."))
 
-(defclass wl-event ()
-  ((%sender :initarg :sender :type wl-proxy
-            :reader wl-event-sender
-            :documentation "Proxy of the object that sent the event")))
-
 (define-condition wl-error (error)
   ((%object :initarg :object :reader wl-error-object
             :type (or wl-proxy null)
@@ -109,19 +104,9 @@
                      (wl-error-message cond)))))
 
 
-;; handle-event protocol -- implemented by subclasses of wl-event-listener
-
-(defclass wl-event-listener ()
-  ()
-  (:documentation "Classes subclassing Wl-EVENT-LISTENER advertise that they implement HANDLE-EVENT."))
-
-(defgeneric handle-event (listener sender event)
-  (:documentation "Notify a listener about an event of interest."))
-
-
 ;; read-event protocol -- implemented by define-event
 
-(defgeneric read-event (sender opcode buffer)
+(defgeneric %read-event (sender opcode buffer)
   (:documentation "Read an event sent from PROXY with the given OPCODE and fast-io BUFFER.
 READ-EVENT methods are defined by DEFINE-EVENT-READER."))
 
@@ -130,7 +115,7 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
     (format stream "~S ~S ~S ~S ~S (~D)"
             :id (wl-proxy-id object)
             :version (wl-proxy-version object)
-            :listeners (length (wl-proxy-listeners object)))))
+            :hooks (length (wl-proxy-hooks object)))))
 
 ;; Proxy management
 
@@ -193,42 +178,21 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
 
 ;; Event handling
 
-;; Stub out some classes for now -- it'll be redefined by WL-INCLUDE in
-;; protocols.lisp
-(defclass wl-callback.done-event (wl-event) ())
-(defclass wl-display.delete-id-event (wl-event) ())
-(defclass wl-display.error-event (wl-event) ())
-
-(defgeneric dispatch-event (sender event)
-  (:documentation "Inform a proxy about an event of interest. Usually, emit the event across its listeners."))
-
-(defmethod dispatch-event (sender event)
-  "Inform all sender's listeners of the event."
-  (dolist (listener (wl-proxy-listeners sender))
-    (handle-event listener sender event)))
-
-(defmethod dispatch-event :before (display (event wl-display.delete-id-event))
-  "Mark the object as destroyed and remove it from the object table."
-  (let* ((id (wl-event-id event))
-         (proxy (find-proxy display id)))
-    (%destroy-proxy proxy)
-    (remhash id (%proxy-table display))))
-
-(defmethod dispatch-event :before (display (event wl-display.error-event))
-  ;; Errors are fatal. When an error is received, the display can no longer be
-  ;; used.
-  (wl-display-disconnect display)
-  (error 'wl-error
-         :object (wl-event-object-id event)
-         :code (wl-event-code event)
-         :message (wl-event-message event)))
-
-(defclass roundtrip-listener (wl-event-listener)
-  ((%callback :initarg :callback))
-  (:documentation "Used by WL-DISPLAY-ROUNDTRIP to funcall an assigned closure."))
-
-(defmethod handle-event ((listener roundtrip-listener) sender (event wl-callback.done-event))
-  (funcall (slot-value listener '%callback)))
+(defun %dispatch-event (sender event)
+  (case (first event)
+    (:delete-id
+     (destructuring-bind (id) (rest event)
+       (%destroy-proxy (find-proxy sender id))
+       (remhash id (%proxy-table sender))))
+    (:error
+     (destructuring-bind (object-id code message) (rest event)
+       (wl-display-disconnect sender)
+       (error 'wl-error
+              :object object-id
+              :code code
+              :message message))))
+  (dolist (hook (wl-proxy-hooks sender))
+    (apply hook event)))
 
 ;; Display management
 
@@ -293,8 +257,8 @@ underlying stream when WL-DISPLAY-DISCONNECT is called."
         (wire:with-input-from-message (buffer sender-id opcode
                                               nil (%wl-display-socket display))
           (setf sender (find-proxy display sender-id)
-                event (read-event sender opcode buffer))
-          (dispatch-event sender event)))))
+                event (%read-event sender opcode buffer))
+          (%dispatch-event sender event)))))
 
 (defun wl-display-roundtrip (display)
   "Block and dispatch events until all requests sent up to this point have been finalized."
@@ -302,9 +266,11 @@ underlying stream when WL-DISPLAY-DISCONNECT is called."
         (sync-complete nil))
     (unwind-protect
       (progn
-        (push (make-instance 'roundtrip-listener
-                             :callback (lambda () (setf sync-complete t)))
-              (wl-proxy-listeners callback))
+        (push (lambda (&rest event)
+                (declare (ignore event))
+                (setf sync-complete t))
+              (wl-proxy-hooks callback))
+
         (do () (sync-complete)
             (wl-display-dispatch-event display)))
       (destroy-proxy callback))))
@@ -463,7 +429,7 @@ destructuring lambda-list bound under the case's body."
                arg-specifiers))))))
 
 (defmacro define-interface (name () &body options)
-  "Define a wl-proxy CLOS subclass an associated wl-event CLOS subclass, and assign the interface's name to the interface table, accessible via #'FIND-INTERFACE-NAMED.
+  "Define a wl-proxy CLOS subclass and assign the interface's name to the interface table, accessible via #'FIND-INTERFACE-NAMED.
 
 NAME - The name of the interface class.
 
@@ -471,11 +437,10 @@ OPTIONS:
 
 (:version VERSION) - Latest supported version of the interface.
 (:documentation DOCSTRING) - Docstring attached to the defined class.
-(:event-class CLASS-NAME) - Define a WL-EVENT subclass with the given class name
 (:skip-defclass BOOLEAN) - If true, do not define the interface class.
                            Used by cl-autowrap when it reads wl_display.
 (:interface-name STRING) - The name of the interface as listed by the wl-registry on a wl-registry-global-event."
-  (%option-bind (version documentation event-class skip-defclass interface-name) options
+  (%option-bind (version documentation skip-defclass interface-name) options
     `(progn
        ;; wl-proxy class
        ,@(unless (first skip-defclass)
@@ -487,13 +452,6 @@ OPTIONS:
                ,@(when documentation
                    `((:documentation ,@documentation)))
                (:metaclass wl-interface))))
-
-       ;; wl-event class
-       ,@(when event-class
-           `((defclass ,(first event-class) (wl-event) ()
-               (:documentation ,(format nil "Event sent from a ~A proxy."
-                                        name)))))
-
        ',name)))
 
 (defmacro define-enum (name () &body (entry-specifiers &rest options))
@@ -594,9 +552,9 @@ OPTIONS:
              ,@defun-body)))))
 
 (defmacro define-event ((name interface opcode) &body (arg-specifiers &rest options))
-  "Define a class and a READ-EVENT method to support WL-DISPLAY-DISPATCH-EVENT.
+  "Define an event to be read by WL-DISPLAY-DISPATCH-EVENT.
 
-NAME - The name of the event class.
+NAME - The name of the event. It can be anything, but is usually a keyword unique to the interface.
 INTERFACE - The name of the interface (as provided by define-interface) whose objects send the event.
 OPCODE - The integer opcode value of the event.
 
@@ -609,33 +567,18 @@ OPTIONS:
 (:DOCUMENTATION DOCSTRING) - Provided to the event class as its docstring.
 (:SINCE VERSION) - Does nothing.
 (:EVENT-SUPERCLASSES CLASS-NAMES...) - When provided, the event class subclasses these given classes. Otherwise, it subclasses WL-EVENT."
-  (%option-bind (documentation event-superclasses) options
+  (%option-bind (documentation) options
     (a:with-gensyms (proxy opcode-sym buffer)
-      (let ((slot-specifiers
-              (mapcar (%slambda (arg-name &key initarg documentation &allow-other-keys)
-                        `(,arg-name :reader ,arg-name
-                                    :initarg ,initarg
-                                    ,@(when documentation
-                                        `(:documentation ,@documentation))))
-                      arg-specifiers))
-            (initargs
-              (mapcan
-                (%slambda (arg-name &key initarg type &allow-other-keys)
-                  (declare (ignore arg-name))
-                  (list initarg
-                        `(%read-arg ,type ,proxy ,buffer)))
-                arg-specifiers)))
-        `(prog1
-           ;; Event class
-           (defclass ,name ,(or event-superclasses '(wl-event))
-             ,slot-specifiers
-             ,@(when documentation
-                 `((:documentation ,@documentation))))
-           ;; Event reader
-           (defmethod read-event ((,proxy ,interface)
-                                  (,opcode-sym (eql ,opcode))
-                                  ,buffer)
-             ,@documentation
-             (make-instance ',name
-                            :sender ,proxy
-                            ,@initargs)))))))
+      `(progn
+         ;; Event reader
+         (defmethod %read-event ((,proxy ,interface)
+                                 (,opcode-sym (eql ,opcode))
+                                 ,buffer)
+           ,@documentation
+           (list ',name
+                 ,@(mapcar
+                     (%slambda (arg-name &key type &allow-other-keys)
+                       (declare (ignore arg-name))
+                       `(%read-arg ,type ,proxy ,buffer))
+                     arg-specifiers)))
+         ',name))))

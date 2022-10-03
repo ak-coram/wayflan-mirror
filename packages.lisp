@@ -40,34 +40,27 @@ The wayland-wire package defines utilities for communicating primitive data thro
                     (#:io #:fast-io)
                     (#:wire #:xyz.shunter.wayflan.wire)
                     (#:sock #:xyz.shunter.wayflan.sockets))
-  (:export #:find-interface-named
-
+  (:export #:wl-interface
            #:wl-interface-version
            #:wl-interface-name
+           #:find-interface-named
 
            #:wl-proxy
            #:wl-proxy-id
            #:wl-proxy-display
            #:wl-proxy-version
-           #:wl-proxy-listeners
+           #:wl-proxy-hooks
 
            #:wl-display
            #:wl-destroyed-proxy
 
-           #:wl-event
-           #:wl-event-sender
+           #:find-proxy
+           #:destroy-proxy
 
            #:wl-error
            #:wl-error-object
            #:wl-error-code
            #:wl-error-message
-
-           #:read-event
-           #:wl-event-listener
-           #:handle-event
-
-           #:find-proxy
-           #:destroy-proxy
 
            #:display-pathname
            #:wl-display-connect

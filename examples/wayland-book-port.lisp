@@ -37,8 +37,25 @@ Executes the body with DISPLAY bound to a freshly connected display."
      (unwind-protect (progn ,@body)
        (destroy-proxy ,var))))
 
-(defclass superapp (wl-event-listener)
-  (;; Display Globals
+(defmacro event-case (event &body clauses)
+  (a:once-only (event)
+    `(case (car ,event)
+       ,@(mapcar (lambda (clause)
+                   (destructuring-bind (event-name lambda-list &body body) clause
+                     `(,event-name
+                        (destructuring-bind ,lambda-list (rest ,event)
+                          ,@body))))
+                 clauses))))
+
+(defmacro elambda (&body clauses)
+  (a:with-gensyms (event)
+    `(lambda (&rest ,event)
+       (event-case ,event ,@clauses))))
+
+
+
+(defclass superapp ()
+  (;; Globals
    wl-display
    wl-registry
    wl-shm
@@ -55,12 +72,7 @@ Executes the body with DISPLAY bound to a freshly connected display."
    (last-frame :initform 0))
   (:documentation "An example Wayland application"))
 
-(defmethod handle-event ((app superapp) buffer (event wl-buffer.release-event))
-  ;; Destroy the buffer when it's no longer being used by the compositor
-  (destroy-proxy buffer))
-
 (defun draw-frame (app)
-  "Create and return a buffer drawn with a checkerboard pattern."
   (with-slots (wl-shm offset) app
     (let* ((width 640)
            (height 480)
@@ -85,56 +97,23 @@ Executes the body with DISPLAY bound to a freshly connected display."
                       #xff666666
                       #xffeeeeee))))
 
-        (push app (wl-proxy-listeners buffer))
+        (push (elambda
+                (:release ()
+                 (destroy-proxy buffer)))
+              (wl-proxy-hooks buffer))
         buffer))))
 
-(defmethod handle-event ((app superapp) surface (event xdg-surface.configure-event))
-  (xdg-surface.ack-configure surface (wl-event-serial event))
-  (let ((buffer (draw-frame app)))
-    (with-slots (wl-surface) app
-      (wl-surface.attach wl-surface buffer 0 0)
-      (wl-surface.commit wl-surface))))
+(defun handle-frame-callback (app callback &rest event)
+  (event-case event
+    (:done (time)
+     (with-slots (last-frame offset wl-surface) app
+       ;; Destroy this callback
+       (destroy-proxy callback)
 
-(defmethod handle-event ((app superapp) xdg-wm-base (event xdg-wm-base.ping-event))
-  (xdg-wm-base.pong xdg-wm-base (wl-event-serial event)))
-
-(defmethod handle-event ((app superapp) sender (event xdg-toplevel.close-event))
-  (throw :close-app (values)))
-
-(defmethod handle-event ((app superapp) registry (event wl-registry.global-event))
-  (with-accessors ((name wl-event-name)
-                   (interface wl-event-interface)
-                   (version wl-event-version)) event
-    (with-slots (wl-compositor wl-shm xdg-wm-base) app
-      (case (a:when-let ((it (find-interface-named interface)))
-              (class-name it))
-        (wl-shm
-          (setf wl-shm (wl-registry.bind registry name 'wl-shm 1)))
-        (wl-compositor
-          (setf wl-compositor (wl-registry.bind registry name 'wl-compositor 4)))
-        (xdg-wm-base
-          (setf xdg-wm-base (wl-registry.bind registry name 'xdg-wm-base 1))
-          (push app (wl-proxy-listeners xdg-wm-base)))))))
-
-(defmethod handle-event ((app superapp) display event)
-  ;; Ignore all un-handled events
-  (declare (ignore app display event)))
-
-(defclass frame-listener (wl-event-listener)
-  ((app :initarg :app))
-  (:documentation "Request & submit a frame on callback"))
-
-(defmethod handle-event ((listener frame-listener) callback event)
-  (let* ((app (slot-value listener 'app))
-         (time (wl-event-callback-data event))
-         (wl-surface (slot-value app 'wl-surface)))
-    (with-slots (last-frame offset) app
-      ;; Destroy this callback
-      (destroy-proxy callback)
-
-      ;; Request another frame
-      (setf callback (wl-surface.frame wl-surface))
-      (push listener (wl-proxy-listeners callback))
+       ;; Request another frame
+       (setf callback (wl-surface.frame wl-surface))
+       (push (a:curry 'handle-frame-callback app callback)
+             (wl-proxy-hooks callback))
 
       ;; Update scroll amount at 24px/second
       (unless (zerop last-frame)
@@ -147,30 +126,60 @@ Executes the body with DISPLAY bound to a freshly connected display."
           wl-surface 0 0 +most-positive-wl-int+ +most-positive-wl-int+)
         (wl-surface.commit wl-surface))
 
-      (setf last-frame time))))
+      (setf last-frame time)))))
+
+(defun handle-registry (app registry &rest event)
+  (with-slots (wl-shm wl-compositor xdg-wm-base) app
+    (event-case event
+      (:global (name interface version)
+       (declare (ignore version))
+       (case (a:when-let ((it (find-interface-named interface)))
+               (class-name it))
+         (wl-shm
+           (setf wl-shm (wl-registry.bind
+                          registry name 'wl-shm 1)))
+         (wl-compositor
+           (setf wl-compositor (wl-registry.bind
+                                 registry name 'wl-compositor 4)))
+         (xdg-wm-base
+           (setf xdg-wm-base (wl-registry.bind
+                               registry name 'xdg-wm-base 1))
+           (push (elambda
+                   (:ping (serial)
+                    (xdg-wm-base.pong xdg-wm-base serial)))
+                 (wl-proxy-hooks xdg-wm-base))))))))
 
 (defun run ()
-  (let* ((app (make-instance 'superapp))
-         (frame-listener (make-instance 'frame-listener :app app)))
-    (with-slots (wl-display wl-registry wl-compositor wl-surface xdg-surface
-                            xdg-wm-base xdg-toplevel) app
+  (let ((app (make-instance 'superapp)))
+    (with-slots (wl-display wl-registry wl-shm wl-compositor
+                            xdg-wm-base wl-surface xdg-surface xdg-toplevel) app
       (with-open-display (display)
         (setf wl-display display
               wl-registry (wl-display.get-registry display))
-        (push app (wl-proxy-listeners wl-registry))
+        (push (a:curry 'handle-registry app wl-registry)
+              (wl-proxy-hooks wl-registry))
         (wl-display-roundtrip display)
 
         (setf wl-surface (wl-compositor.create-surface wl-compositor)
               xdg-surface (xdg-wm-base.get-xdg-surface
                             xdg-wm-base wl-surface)
               xdg-toplevel (xdg-surface.get-toplevel xdg-surface))
-        (push app (wl-proxy-listeners xdg-surface))
-        (push app (wl-proxy-listeners xdg-toplevel))
+        (push (elambda
+                (:close () (throw :close-app (values))))
+              (wl-proxy-hooks xdg-toplevel))
+        (push (elambda
+                (:configure (serial)
+                 (xdg-surface.ack-configure xdg-surface serial)
+                 (let ((buffer (draw-frame app)))
+                   (wl-surface.attach wl-surface buffer 0 0)
+                   (wl-surface.commit wl-surface))))
+              (wl-proxy-hooks xdg-surface))
         (xdg-toplevel.set-title xdg-toplevel "Example client")
         (wl-surface.commit wl-surface)
 
         (let ((cb (wl-surface.frame wl-surface)))
-          (push frame-listener (wl-proxy-listeners cb)))
+          (push (a:curry 'handle-frame-callback app cb)
+                (wl-proxy-hooks cb)))
 
         (catch :close-app
                (loop (wl-display-dispatch-event display)))))))
