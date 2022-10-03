@@ -178,18 +178,20 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
 ;; Event handling
 
 (defun %dispatch-event (sender event)
-  (case (first event)
-    (:delete-id
-     (destructuring-bind (id) (rest event)
-       (%destroy-proxy (find-proxy sender id))
-       (remhash id (%proxy-table sender))))
-    (:error
-     (destructuring-bind (object-id code message) (rest event)
-       (wl-display-disconnect sender)
-       (error 'wl-error
-              :object object-id
-              :code code
-              :message message))))
+  (when (typep sender 'wl-display)
+    (case (first event)
+      (:delete-id
+        (destructuring-bind (id) (rest event)
+          (%destroy-proxy (find-proxy sender id))
+          (remhash id (%proxy-table sender))))
+      (:error
+        (destructuring-bind (object-id code message) (rest event)
+          (wl-display-disconnect sender)
+          (error 'wl-error
+                 :object object-id
+                 :code code
+                 :message message)))))
+
   (dolist (hook (wl-proxy-hooks sender))
     (apply hook event)))
 
@@ -381,7 +383,7 @@ destructuring lambda-list bound under the case's body."
                        :version (wire:read-wl-uint ,buffer))
          `(error "Don't know how to read an untyped :NEW-ID yet.")))
     (:array `(wire:read-wl-array ,buffer))
-    (:fd `(error "Don't know how to read fd's yet."))))
+    (:fd `(sock:read-fd (%wl-display-socket (wl-proxy-display ,sender))))))
 
 (defmacro %write-arg (place type socket buffer)
   "Write an object stored in PLACE to the Wayland buffer depending on the given TYPE."

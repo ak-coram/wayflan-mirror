@@ -53,6 +53,7 @@
   ((:enotdir "ENOTDIR"))
   ((:enotsock "ENOTSOCK"))
   ((:eopnotsupp "EOPNOTSUPP"))
+  ((:eoverflow "EOVERFLOW"))
   ((:eperm "EPERM"))
   ((:epipe "EPIPE"))
   ((:eproto "EPROTO"))

@@ -4,6 +4,7 @@
 ;;; All rights reserved.
 
 (in-package #:xyz.shunter.wayflan.sockets)
+(declaim (optimize debug))
 
 
 
@@ -33,7 +34,7 @@
 
 ;; The circular buffer size must be able to fit the necessary fd's
 (assert (>= +buf-size+
-            (* +max-fds-out+ (cffi:foreign-type-size :int))))
+            (the fixnum (* +max-fds-out+ (the fixnum (cffi:foreign-type-size :int))))))
 
 
 
@@ -58,8 +59,12 @@
                  cb-clear))
 (defun cb-start* (cb) (logand (cb-start cb) (1- +buf-size+)))
 (defun cb-end* (cb) (logand (cb-end cb) (1- +buf-size+)))
-(defun cb-length (cb) (- (cb-end cb) (cb-start cb)))
-(defun cb-free-space (cb) (+ +buf-size+ (cb-start cb) (- (cb-end cb))))
+(defun cb-length (cb)
+  (declare (type circular-buffer cb))
+  (the fixnum (- (cb-end cb) (cb-start cb))))
+(defun cb-free-space (cb)
+  (declare (type circular-buffer cb))
+  (the fixnum (+ +buf-size+ (cb-start cb) (- (cb-end cb)))))
 
 (defun cb-clear (cb)
   (setf (cb-start cb) 0
@@ -67,6 +72,7 @@
   (values))
 
 (defun free-circular-buffer (cb)
+  (declare (type circular-buffer cb))
   (cffi:foreign-free (cb-ptr cb))
   (setf (cb-ptr cb) (cffi:null-pointer)
         (cb-start cb) 0
@@ -75,6 +81,8 @@
 
 (defun cb-shiftout (cb nbytes)
   "Mark that the given number of bytes were consumed."
+  (declare (type circular-buffer cb)
+           (type fixnum nbytes))
   (with-accessors ((start cb-start)
                    (end cb-end)) cb
     (assert (<= (+ start nbytes) end))
@@ -85,15 +93,19 @@
 
 (defun cb-shiftin (cb nbytes)
   "Mark that the given nubmer of bytes were written to the buffer."
+  (declare (type circular-buffer cb)
+           (type fixnum nbytes))
   (with-accessors ((end cb-end)
                    (length cb-length)) cb
     (assert (<= (+ length nbytes) +buf-size+))
     (incf end nbytes)
     (values)))
 
+;; TODO refactor duplicate code in cb-push-octets, cb-push-foreign-objects
 (defun cb-push-octets (cb sarray start end)
   "Push octets from the array to the circular buffer."
-  (declare (type simple-octet-sarray sarray)
+  (declare (type circular-buffer cb)
+           (type simple-octet-sarray sarray)
            (type fixnum start end))
   (when (zerop (length sarray))
     (return-from cb-push-octets))
@@ -113,9 +125,29 @@
                         (- n first-seg)))))
     (cb-shiftin cb n)))
 
+(defun cb-push-foreign-octets (cb carray n)
+  (declare (type circular-buffer cb)
+           (type cffi:foreign-pointer carray)
+           (type fixnum size))
+  (unless (plusp n)
+    (return-from cb-push-foreign-octets))
+  (assert (>= (cb-free-space cb) n))
+  (if (<= (+ (cb-start* cb) n) +buf-size+)
+      (ffi:memcpy (cffi:inc-pointer (cb-ptr cb) (cb-end* cb))
+                  carray n)
+      (let ((first-seg (- +buf-size+ (cb-start* cb))))
+        (ffi:memcpy (cffi:inc-pointer (cb-ptr cb) (cb-end* cb))
+                    carray
+                    first-seg)
+        (ffi:memcpy (cb-ptr cb)
+                    (cffi:inc-pointer carray first-seg)
+                    (- n first-seg))))
+  (cb-shiftin cb n))
+
 (defun cb-pull-octets (cb sarray start end)
   "Pull octets from the circular buffer to the array."
-  (declare (type simple-octet-sarray sarray)
+  (declare (type circular-buffer cb)
+           (type simple-octet-sarray sarray)
            (type fixnum start end))
   (let ((n (- end start)))
     (assert (plusp n))
@@ -133,7 +165,8 @@
     (cb-shiftout cb n)))
 
 (defun cb-push-int (cb int)
-  (declare (type c-sized-int int))
+  (declare (type circular-buffer cb)
+           (type c-sized-int int))
   (setf (cffi:mem-ref (cb-ptr cb) :int (cb-end* cb)) int)
   (cb-shiftin cb (cffi:foreign-type-size :int)))
 
@@ -144,7 +177,8 @@
     (cb-shiftout cb (cffi:foreign-type-size :int))))
 
 (defun cb-push-octet (cb octet)
-  (declare (type octet octet))
+  (declare (type circular-buffer cb)
+           (type octet octet))
   (setf (cffi:mem-ref (cb-ptr cb) :uint8 (cb-end* cb)) octet)
   (cb-shiftin cb 1))
 
@@ -255,7 +289,18 @@ in the circular buffer and return the number of iovecs used."
     (when (plusp ffi:msg-controllen)
       ffi:msg-control)))
 
-;; TODO cmsg-nxthdr for reading
+(defun cmsg-nxthdr (msghdr cmsghdr)
+  (cffi:with-foreign-slots ((ffi:msg-control ffi:msg-controllen)
+                            msghdr (:struct ffi:msghdr))
+    (let ((ptr (cffi:inc-pointer
+                 cmsghdr
+                 (cmsg-align (cffi:foreign-slot-value
+                               cmsghdr '(:struct ffi:cmsghdr)
+                               'ffi:cmsg-len)))))
+      (unless (> (+ (cffi:pointer-address ptr) 1
+                    (- (cffi:pointer-address ffi:msg-control)))
+                 ffi:msg-controllen)
+        ptr))))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun cmsg-space (length)
@@ -427,14 +472,21 @@ Return two values: the number of octets written, and whether the call would have
   "Read data from the socket into the buffer.
 Return two values: the number of octets read, and whether the call would have been blocked in NONBLOCKING? was NIL."
   (with-slots (fd input-iobuf input-fdbuf) socket
-    (declare (ignore input-fdbuf))
     (cffi:with-foreign-objects ((msghdr '(:struct ffi:msghdr))
-                                (iov '(:struct ffi:iovec) 2))
-      (cffi:with-foreign-slots ((ffi:msg-iov ffi:msg-iovlen)
-                                iov (:struct ffi:msghdr))
-        (setf ffi:msg-iov iov
-              ffi:msg-iovlen (cb-prepare-scatter-iovec input-iobuf iov)))
-      ;; TODO fill in cmsg to read fd's here
+                                (iov '(:struct ffi:iovec) 2)
+                                (cmsg :uint8 +cspace+))
+      (cffi:with-foreign-slots ((ffi:msg-name ffi:msg-namelen
+                                 ffi:msg-iov ffi:msg-iovlen
+                                 ffi:msg-control ffi:msg-controllen
+                                 ffi:msg-flags)
+                                msghdr (:struct ffi:msghdr))
+        (setf ffi:msg-name (cffi:null-pointer)
+              ffi:msg-namelen 0
+              ffi:msg-iov iov
+              ffi:msg-iovlen (cb-prepare-scatter-iovec input-iobuf iov)
+              ffi:msg-control cmsg
+              ffi:msg-controllen +cspace+
+              ffi:msg-flags 0))
 
       (let ((nread (ffi:recvmsg fd msghdr (if nonblocking? '(:dontwait) ()))))
         (when (minusp nread)
@@ -444,6 +496,28 @@ Return two values: the number of octets read, and whether the call would have be
                 (return-from %read-once (values 0 t))
                 (error 'socket-stream-error :errno ffi:*errno* :stream socket))))
         (cb-shiftin input-iobuf nread)
+
+        ;; Read ctl messages
+        (do ((cmsghdr (cmsg-firsthdr msghdr)
+                      (cmsg-nxthdr msghdr cmsghdr))
+             overflow?
+             size max)
+            ((null cmsghdr)
+             (when overflow?
+               (error 'socket-stream-error :errno :eoverflow :stream socket)))
+          (cffi:with-foreign-slots ((ffi:cmsg-len ffi:cmsg-level ffi:cmsg-type)
+                                    cmsghdr (:struct ffi:cmsghdr))
+            (when (and (= ffi:cmsg-level ffi:+sol-socket+)
+                       (= ffi:cmsg-type ffi:+scm-rights+))
+              (setf size (- ffi:cmsg-len (cmsg-len 0))
+                    max (cb-free-space input-fdbuf))
+              (if (or (> size max) overflow?)
+                  (progn
+                    (setf overflow? t)
+                    (dotimes (i (floor size (load-time-value (cffi:foreign-type-size :int))))
+                      (ffi:close (cffi:mem-aref (cmsg-data cmsghdr) :int i))))
+                  (cb-push-foreign-octets
+                    input-fdbuf (cmsg-data cmsghdr) size)))))
         (values nread nil)))))
 
 (defun %read-into-sarray (socket sarray start end)
