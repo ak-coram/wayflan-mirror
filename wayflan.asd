@@ -63,17 +63,19 @@
   :description "Example suite for Wayflan"
 
   :depends-on (#:wayflan
-               #:posix-shm
                #:cl-colors
                #:cl-cairo2
-               #:cl-pango)
+               #:cl-pango
+               #:input-event-codes
+               #:posix-shm)
   :pathname #P"examples/"
   :serial nil
   :components ((:file "global-info")
                (:file "checkerboxed-demo")
                (:static-file "lisplogo_256.png")
                (:file "cairo-demo"
-                      :depends-on ("lisplogo_256.png"))))
+                      :depends-on ("lisplogo_256.png"))
+               (:file "wl-pointer-demo")))
 
 (defsystem #:wayflan/test
   :version "0.0.0"

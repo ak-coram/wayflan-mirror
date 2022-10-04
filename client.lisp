@@ -75,6 +75,7 @@
                       `((>= (wl-proxy-version ,proxy) ,version)))))))
 
 (defclass wl-display (wl-proxy)
+  ;; FIXME the table is being polluted with destroyed proxies junk.
   ((%proxy-table :initform (make-hash-table) :reader %proxy-table)
    (%socket :initarg :socket :reader %wl-display-socket))
   (:documentation "A connection to the compositor that acts as a proxy to the wl_display singleton object")
