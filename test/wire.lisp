@@ -64,22 +64,7 @@
           (wire:write-wl-int #x-70077007 buf)
           (wire:write-wl-int #x-80000000 buf)
           (wire:write-wl-int -1 buf))
-        "write-wl-int can write negative integers")
-
-  (p:fail (io:with-fast-output (buf)
-            (wire:write-wl-int #xDEADBEEF buf))
-          type-error
-          "write-wl-int can't write out-of-bounds integers")
-
-  (p:fail (io:with-fast-output (buf)
-            (wire:write-wl-int #x80000000 buf))
-          type-error
-          "write-wl-int can't write out-of-bounds integers")
-
-  (p:fail (io:with-fast-output (buf)
-            (wire:write-wl-int #x-80000001 buf))
-          type-error
-          "write-wl-int can't write out-of-bounds integers"))
+        "write-wl-int can write negative integers"))
 
 (p:define-test read-wl-uint
   (p:is equal '(#xDEADBEEF
@@ -111,17 +96,7 @@
           (wire:write-wl-uint #x89ABCDEF buf)
           (wire:write-wl-uint #xFFFFFFFF buf)
           (wire:write-wl-uint #x00000000 buf))
-        "write-wl-uint can write positive integers")
-
-  (p:fail (io:with-fast-output (buf)
-            (wire:write-wl-uint -1 buf))
-          type-error
-          "write-wl-uint can't write negative integers")
-
-  (p:fail (io:with-fast-output (buf)
-            (wire:write-wl-uint #x100000000 buf))
-          type-error
-          "write-wl-uint can't write out-of-bounds integers"))
+        "write-wl-uint can write positive integers"))
 
 (p:define-test read-wl-fixed
   (p:is equal '(#x12345624/100
@@ -156,12 +131,7 @@
           (wire:write-wl-fixed #x000111FF/100 buf)
           (wire:write-wl-fixed #x112233 buf)
           (wire:write-wl-fixed #x7FFFFFFF/100 buf))
-        "write-wl-fixed can write fixed numbers")
-
-  (p:fail (io:with-fast-output (buf)
-            (wire:write-wl-fixed #x1000000 buf))
-          type-error
-          "write-wl-fixed can't write out-of-bounds numbers."))
+        "write-wl-fixed can write fixed numbers"))
 
 (p:define-test read-wl-string
   (p:is string= "hello world"

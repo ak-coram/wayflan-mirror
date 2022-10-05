@@ -385,6 +385,7 @@ destructuring lambda-list bound under the case's body."
     (:int `(wire:read-wl-int ,buffer))
     (:uint `(wire:read-wl-uint ,buffer))
     (:fixed `(wire:read-wl-fixed ,buffer))
+    (:array `(wire:read-wl-array ,buffer))
     (:string `(wire:read-wl-string ,buffer))
     ((:object &key interface allow-null)
       (a:with-gensyms (id)
@@ -404,7 +405,6 @@ destructuring lambda-list bound under the case's body."
                        ,sender
                        :version (wire:read-wl-uint ,buffer))
          `(error "Don't know how to read an untyped :NEW-ID yet.")))
-    (:array `(wire:read-wl-array ,buffer))
     (:fd `(sock:read-fd (%wl-display-socket (wl-proxy-display ,sender))))))
 
 (defmacro %write-arg (place type socket buffer)
@@ -413,6 +413,7 @@ destructuring lambda-list bound under the case's body."
     (:int `(wire:write-wl-int ,place ,buffer))
     (:uint `(wire:write-wl-uint ,place ,buffer))
     (:fixed `(wire:write-wl-fixed ,place ,buffer))
+    (:array `(wire:write-wl-array ,place ,buffer))
     (:string `(wire:write-wl-string ,place ,buffer))
     ((:object &key interface allow-null)
      (a:once-only (place)
@@ -437,7 +438,6 @@ destructuring lambda-list bound under the case's body."
                                   ,buffer)
             (wire:write-wl-uint (wl-proxy-version ,place) ,buffer)
             (wire:write-wl-uint (wl-proxy-id ,place) ,buffer))))
-    (:array `(wire:write-wl-array ,place ,buffer))
     (:fd `(sock:write-fd ,socket ,place))))
 
 (defmacro %send-request (sender opcode &body arg-specifiers)
