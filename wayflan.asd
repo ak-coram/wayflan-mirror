@@ -17,6 +17,7 @@
                #:trivial-features
                #:wayflan/sockets)
 
+  :pathname #P"src/"
   :serial t
   :components ((:module #:protocols
                         :pathname "protocols"
