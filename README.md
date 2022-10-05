@@ -1,6 +1,8 @@
 # Wayflan
+[![builds.sr.ht status](https://builds.sr.ht/~shunter/wayflan/commits/test.yml.svg)](https://builds.sr.ht/~shunter/wayflan/commits/test.yml)
+[![Quicklisp status](https://quickdocs.org/badge/wayflan.svg)](https://quickdocs.org/wayflan)
 
-Wayland implementation for clients.
+Wayland client implementation for Common Lisp.
 
 ## Dependencies
 

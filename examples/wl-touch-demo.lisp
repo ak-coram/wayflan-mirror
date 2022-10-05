@@ -30,7 +30,6 @@
    xdg-surface
    xdg-toplevel
    (wl-touch :initform nil)
-   cursor-surface
 
    ;; State
    width
@@ -49,7 +48,7 @@
            (size (* stride height))
            buffer)
       (shm:with-open-shm-and-mmap* (shm pool-data (:direction :io :permissions '(:user-all))
-                                        ((cffi:null-pointer) size '(:read :write) 0))
+                                        ((cffi:null-pointer) size '(:read :write) () 0))
         (with-proxy (pool (wl-shm.create-pool wl-shm (shm:shm-fd shm) size))
           (setf buffer (wl-shm-pool.create-buffer
                          pool 0 width height stride :xrgb8888)))
@@ -133,16 +132,16 @@
                y new-y)))
       (:frame ()
        ;; Intentionally left blank.
-       ;; The Wayland spec says the client should accumulate all state and
-       ;; start processing the events as a logical group once the :FRAME
-       ;; event is hit, signalling the frame is finished.
        ;;
-       ;; This app doesn't process anything at :FRAME since state accumulation
-       ;; Is the entire nature of the event logic here.
-       )
-      (:cancel ()
-       ;; TODO figure out exactly how to trigger this, to demonstrate it in
-       ;; the demo.
+       ;; The wl-touch FRAME event groups separate events together, by
+       ;; signifying the end of a logical group -- for example, an :UP event
+       ;; followed by a :DOWN event may signify touch input moving from
+       ;; one surface to another.
+       ;;
+       ;; This application is simple enough that it doesn't need to understand
+       ;; logical event groups. Applications with more complex event processing
+       ;; ought to accumulate each event, and then process them as a group once
+       ;; :FRAME is heard.
        )
       (:shape (id new-major new-minor)
        (with-accessors ((major point-major)
@@ -159,67 +158,20 @@
        (format t "Seat name: ~S~%" name))
       (:capabilities (capabilities)
        (format t "Wl-seat capabilities: ~S~%" capabilities)
-       (cond
-         ((and (member :touch capabilities)
-               (null wl-touch))
-          (setf wl-touch (wl-seat.get-touch wl-seat))
-          (push (a:curry 'handle-touch app)
-                (wl-proxy-hooks wl-touch)))
-         ((and (not (member :touch capabilities))
-               wl-touch)
-          (destroy-proxy wl-touch)
-          (setf wl-touch nil)))))))
-
-(defun make-cursor-surface (app)
-  "Create a static, pre-drawn surface to use as the pointer's image, or cursor."
-  (with-slots (wl-shm wl-compositor) app
-    (let* ((width 25)
-           (height 25)
-           (stride (* width 4))
-           (size (* stride height))
-           (surface (wl-compositor.create-surface wl-compositor))
-           buffer)
-
-      (posix-shm:with-open-shm-and-mmap* (shm pool-data (:direction :io :permissions '(:user-all))
-                                              ((cffi:null-pointer) size '(:read :write) 0))
-
-        ;; Create a buffer out of the shm memory
-        (with-proxy (pool (wl-shm.create-pool wl-shm (shm:shm-fd shm) size))
-          (setf buffer (wl-shm-pool.create-buffer
-                         pool 0 width height stride
-                         :argb8888)))
-
-        ;; Draw the surface
-        (cairo:with-surface-and-context (surf (cairo:create-image-surface-for-data
-                                                pool-data :argb32 width height stride))
-          ;; Draw a green square with a black border
-          (cairo:set-source-rgb 0 1 0)
-          (cairo:paint)
-
-          (cairo:set-source-rgb 0 0 0)
-          (cairo:set-line-width 1)
-          (cairo:rectangle 0 0 25 25)
-          (cairo:stroke)))
-
-      ;; Destroy the buffer when the server mentions it's released.
-      ;; Though in theory, it shouldn't be released, as the cursor surface
-      ;; lives for the duration of the application.
-      (push (evelambda
-              (:release ()
-               (destroy-proxy buffer)))
-            (wl-proxy-hooks buffer))
-
-      (wl-surface.attach surface buffer 0 0)
-      (wl-surface.damage-buffer
-        surface 0 0 +most-positive-wl-int+ +most-positive-wl-int+)
-      (wl-surface.commit surface)
-      surface)))
+       (if (member :touch capabilities)
+           (unless wl-touch
+             (setf wl-touch (wl-seat.get-touch wl-seat))
+             (push (a:curry 'handle-touch app)
+                   (wl-proxy-hooks wl-touch)))
+           (when wl-touch
+             (destroy-proxy wl-touch)
+             (setf wl-touch nil)))))))
 
 (defun run ()
   (with-open-display (display)
     (let ((app (make-instance 'app :display display)))
       (with-slots (wl-shm wl-registry wl-compositor xdg-wm-base wl-seat
-                          wl-surface xdg-surface xdg-toplevel cursor-surface
+                          wl-surface xdg-surface xdg-toplevel
                           width height) app
         ;; Get the registry and bind all globals
         (setf wl-registry (wl-display.get-registry display))
@@ -251,9 +203,6 @@
                            (wl-proxy-hooks xdg-wm-base))))))
               (wl-proxy-hooks wl-registry))
         (wl-display-roundtrip display)
-
-        ;; Prepare a custom cursor surface to toggle on middle-click.
-        (setf cursor-surface (make-cursor-surface app))
 
         ;; Make a surface and give it the toplevel desktop role.
         (setf wl-surface (wl-compositor.create-surface wl-compositor)

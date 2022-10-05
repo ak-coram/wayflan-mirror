@@ -60,7 +60,7 @@
            (size (* stride height))
            buffer)
       (shm:with-open-shm-and-mmap* (shm pool-data (:direction :io :permissions '(:user-all))
-                                        ((cffi:null-pointer) size '(:read :write) 0))
+                                        ((cffi:null-pointer) size '(:read :write) () 0))
         (with-proxy (pool (wl-shm.create-pool wl-shm (shm:shm-fd shm) size))
           (setf buffer (wl-shm-pool.create-buffer
                          pool 0 width height stride :xrgb8888)))
@@ -210,12 +210,18 @@
          (setf radius (a:clamp (- radius delta) +min-radius+ +max-radius+))))
       (:frame ()
        ;; Intentionally left blank.
-       ;; The Wayland spec says the client should accumulate all state and
-       ;; start processing the events as a logical group once the :FRAME
-       ;; event is hit, signalling the frame is finished.
        ;;
-       ;; This app doesn't process anything at :FRAME since state accumulation
-       ;; Is the entire nature of the event logic here.
+       ;; The wl-pointer FRAME event groups separate events together, by
+       ;; signifying the end of a logical group -- for example, an :AXIS-SOURCE
+       ;; showing where a scroll is coming from, two :AXIS events for
+       ;; :HORIZONTAL-SCROLL and :VERTICAL-SCROLL signifying a vertical scroll,
+       ;; or a :LEAVE followed by an :ENTER to signify the pointer moved from
+       ;; one surface to the other.
+       ;;
+       ;; This application is simple enough that it doesn't need to understand
+       ;; logical event groups. Applications with more complex event processing
+       ;; ought to accumulate each event, and then process them as a group once
+       ;; :FRAME is heard.
        ))))
 
 (defun handle-seat (app &rest event)
@@ -225,16 +231,14 @@
        (format t "Seat name: ~S~%" name))
       (:capabilities (capabilities)
        (format t "Wl-seat capabilities: ~S~%" capabilities)
-       (cond
-         ((and (member :pointer capabilities)
-               (null wl-pointer))
-          (setf wl-pointer (wl-seat.get-pointer wl-seat))
-          (push (a:curry 'handle-pointer app)
-                (wl-proxy-hooks wl-pointer)))
-         ((and (not (member :pointer capabilities))
-               wl-pointer)
-          (destroy-proxy wl-pointer)
-          (setf wl-pointer nil)))))))
+       (if (member :pointer capabilities)
+           (unless wl-pointer
+             (setf wl-pointer (wl-seat.get-pointer wl-seat))
+             (push (a:curry 'handle-pointer app)
+                   (wl-proxy-hooks wl-pointer)))
+           (when wl-pointer
+             (destroy-proxy wl-pointer)
+             (setf wl-pointer nil)))))))
 
 (defun make-cursor-surface (app)
   "Create a static, pre-drawn surface to use as the pointer's image, or cursor."
@@ -247,7 +251,7 @@
            buffer)
 
       (posix-shm:with-open-shm-and-mmap* (shm pool-data (:direction :io :permissions '(:user-all))
-                                              ((cffi:null-pointer) size '(:read :write) 0))
+                                              ((cffi:null-pointer) size '(:read :write) () 0))
 
         ;; Create a buffer out of the shm memory
         (with-proxy (pool (wl-shm.create-pool wl-shm (shm:shm-fd shm) size))
@@ -338,7 +342,7 @@
                  ;; Close the app
                  (return-from run)))
               (wl-proxy-hooks xdg-toplevel))
-        (xdg-toplevel.set-title xdg-toplevel "Wayflan Cairo Demo")
+        (xdg-toplevel.set-title xdg-toplevel "Wayflan wl_pointer Demo")
         (wl-surface.commit wl-surface)
 
        (let ((cb (wl-surface.frame wl-surface)))
