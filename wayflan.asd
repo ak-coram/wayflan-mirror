@@ -67,6 +67,7 @@
                #:cl-colors
                #:cl-cairo2
                #:cl-pango
+               #:cl-xkb
                #:input-event-codes
                #:posix-shm)
   :pathname #P"examples/"

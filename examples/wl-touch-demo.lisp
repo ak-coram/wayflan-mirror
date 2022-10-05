@@ -38,6 +38,7 @@
 
 (defstruct point
   x y
+  first-x first-y
   major
   minor
   orientation)
@@ -61,20 +62,38 @@
           (cairo:paint)
 
           ;; Draw blue crosses for each point
-          (cairo:set-source-rgb 0 0 1)
           (cairo:set-line-width 20)
           (loop :with point-radius := 50
+                :with minor-radius := 25
                 :for point :being :the :hash-value :of points
                 :do (with-accessors ((x point-x)
-                                     (y point-y)) point
+                                     (y point-y)
+                                     (first-x point-first-x)
+                                     (first-y point-first-y)) point
+                      ;; Draw the tail, which is a line from its first x,y
+                      ;; to the current, ended with a smaller cross.
+                      (progn
+                        (cairo:set-source-rgb 0 0 0.5)
+                        (cairo:move-to first-x first-y)
+                        (cairo:line-to x y)
+                        (cairo:move-to (- first-x minor-radius)
+                                       (- first-y minor-radius))
+                        (cairo:line-to (+ first-x minor-radius)
+                                       (+ first-y minor-radius))
+                        (cairo:move-to (+ first-x minor-radius)
+                                       (- first-y minor-radius))
+                        (cairo:line-to (- first-x minor-radius)
+                                       (+ first-y minor-radius))
+                        (cairo:stroke))
                       ;; TODO if I ever get a touchscreen with
                       ;; shape support, draw ellipses.
                       (progn
+                        (cairo:set-source-rgb 0 0 1)
                         (cairo:move-to (- x point-radius) (- y point-radius))
                         (cairo:line-to (+ x point-radius) (+ y point-radius))
                         (cairo:move-to (+ x point-radius) (- y point-radius))
-                        (cairo:line-to (- x point-radius) (+ y point-radius)))
-                      (cairo:stroke)))
+                        (cairo:line-to (- x point-radius) (+ y point-radius))
+                        (cairo:stroke))))
 
           ;; Draw touch data at top-left.
           (cairo:set-source-rgb 0 0 0)
@@ -120,7 +139,7 @@
       (:down (serial time-ms surface id x y)
        (declare (ignore serial time-ms surface))
        (setf (gethash id points)
-             (make-point :x x :y y)))
+             (make-point :x x :y y :first-x x :first-y y)))
       (:up (serial time-ms id)
        (declare (ignore serial time-ms))
        (remhash id points))
