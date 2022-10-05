@@ -123,10 +123,20 @@
 (defmethod print-object ((object wl-display) stream)
   (print-unreadable-object (object stream :type t :identity t)
     (format stream "~S ~S ~S ~S ~S ~S ~S (~D)"
-            :on (wl-proxy-pathname object)
+            :on (wl-display-pathname object)
             :id (wl-proxy-id object)
             :version (wl-proxy-version object)
             :hooks (length (wl-proxy-hooks object)))))
+
+;; enum coding protocol -- implemented by define-enum
+
+(defgeneric %encode-enum (enum value)
+  (:documentation
+    "Encode a keyword (or, in the case of a bitfield enum, a list of keywords) into its enum-associated wl-uint."))
+
+(defgeneric %decode-enum (enum value)
+  (:documentation
+    "Decode an integer into its enum-associated keyword (or, in the case of a bitfield enum, a list of keywords)."))
 
 ;; read-event protocol -- implemented by define-event
 
@@ -255,16 +265,14 @@ underlying stream when WL-DISPLAY-DISCONNECT is called."
       :version 1)))
 
 (defgeneric wl-display-disconnect (display)
-  (:documentation "Close the display's underlying stream and remove all proxies."))
-
-(defmethod wl-display-disconnect ((display wl-display))
-  (prog1
-    (close (%wl-display-socket display))
-    (%clear-proxies display)))
-
-(defmethod wl-display-disconnect ((display wl-destroyed-proxy))
-  ;; Assume the proxy was a deleted display, do nothing.
-  nil)
+  (:documentation "Close the display's underlying stream and remove all proxies.")
+  (:method ((display wl-display))
+   (prog1
+     (close (%wl-display-socket display))
+     (%clear-proxies display)))
+  (:method ((display wl-destroyed-proxy))
+   ;; Assume the proxy was a deleted display -- do nothing.
+   nil))
 
 (defun wl-display-listen (display)
   "Return whether there is a (partial) message available from the display."
@@ -382,8 +390,16 @@ destructuring lambda-list bound under the case's body."
 (defmacro %read-arg (type sender buffer)
   "Read an object from the Wayland buffer depending on the given TYPE."
   (%wltype-ecase type
-    (:int `(wire:read-wl-int ,buffer))
-    (:uint `(wire:read-wl-uint ,buffer))
+    ((:int &optional enum)
+     (@and `(wire:read-wl-int ,buffer)
+           (if enum
+               `(%decode-enum ',enum ,|@|)
+               @)))
+    ((:uint &optional enum)
+     (@and `(wire:read-wl-uint ,buffer)
+           (if enum
+               `(%decode-enum ',enum ,|@|)
+               @)))
     (:fixed `(wire:read-wl-fixed ,buffer))
     (:array `(wire:read-wl-array ,buffer))
     (:string `(wire:read-wl-string ,buffer))
@@ -410,8 +426,18 @@ destructuring lambda-list bound under the case's body."
 (defmacro %write-arg (place type socket buffer)
   "Write an object stored in PLACE to the Wayland buffer depending on the given TYPE."
   (%wltype-ecase type
-    (:int `(wire:write-wl-int ,place ,buffer))
-    (:uint `(wire:write-wl-uint ,place ,buffer))
+    ((:int &optional enum)
+     `(wire:write-wl-int
+        ,(if enum
+             `(%encode-enum ',enum ,place)
+             place)
+        ,buffer))
+    ((:uint &optional enum)
+     `(wire:write-wl-uint
+        ,(if enum
+             `(%encode-enum ',enum ,place)
+             place)
+        ,buffer))
     (:fixed `(wire:write-wl-fixed ,place ,buffer))
     (:array `(wire:write-wl-array ,place ,buffer))
     (:string `(wire:write-wl-string ,place ,buffer))
@@ -477,15 +503,56 @@ OPTIONS:
                (:metaclass wl-interface))))
        ',name)))
 
-;; TODO provide a better interface with enums via converting them into keywords.
+(defun %encode-standard-enum (enum table value)
+  (cdr (or (find value table :key #'car :test #'eq)
+           (error "Unknown enum value ~S ~S" enum value))))
+
+(defun %decode-standard-enum (enum table value)
+  (car (or (find value table :key #'cdr :test #'=)
+           (error "Unknown enum value ~S ~S" enum value))))
+
+(defun %encode-bitfield-enum (enum table values)
+  (let ((result 0))
+    (dolist (value values result)
+      (setf result (logior result
+                           (cdr (or (find value table :key #'car :test #'eq)
+                                    (error "Unknown enum value ~S ~S" enum value))))))))
+
+(defun %decode-bitfield-enum (table value zero-value)
+  (let (result)
+    (dolist (entry table (if result (nreverse result) zero-value))
+      (when (and (= (cdr entry) (logand value (cdr entry)))
+                 (plusp (cdr entry)))
+        (push (car entry) result)))))
+
 (defmacro define-enum (name () &body (entry-specifiers &rest options))
-  "Define a parameter that associates each entry keyword with an index in the array."
-  (declare (ignore name options))
-  `(progn
-     ,@(mapcar (lambda (specifier)
-                 (destructuring-bind (variable value &key documentation) specifier
-                   `(defparameter ,variable ,value ,documentation)))
-               entry-specifiers)))
+  "Define a parameter that associates each entry keyword with an index in the array.
+
+NAME - The name of the enum class. Used as arguments in Wayland types :INT and :UINT.
+
+OPTIONS:
+
+(:since INTEGER) - The interface version since it appeared.
+(:documentation DOCSTRING) - Ignored.
+(:bitfield BOOLEAN) - Whether individual bits have specific meanings. If set, enums are decoded as a list of arguments, rather than a single argument."
+  (%option-bind (bitfield) options
+    `(let ((table ',(mapcar (%slambda (argument value &key &allow-other-keys)
+                              (cons argument value))
+                            entry-specifiers)))
+       (defmethod %encode-enum ((enum (eql ',name)) value)
+         ,(if bitfield
+              `(%encode-bitfield-enum enum table value)
+              `(%encode-standard-enum enum table value)))
+
+       (defmethod %decode-enum ((enum (eql ',name)) value)
+         ,(if bitfield
+              `(%decode-bitfield-enum
+                 table value
+                 ,(a:when-let ((zero-entry (find 0 entry-specifiers
+                                                 :key #'second :test #'=)))
+                    `'(,(first zero-entry))))
+              `(%decode-standard-enum enum table value)))
+       ',name)))
 
 (defmacro define-request ((name interface opcode) &body (arg-specifiers &rest options))
   "Define a function implementing the wl request.

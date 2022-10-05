@@ -111,9 +111,6 @@
 (defun dot (base &rest rest)
   (format nil "~A.~A" (lispify base) (apply #'hyphenize rest)))
 
-(defun muff (name)
-  (format nil "+~A+" name))
-
 (defun interface-name (dom-interface)
   (intern (lispify (name dom-interface))))
 
@@ -130,20 +127,27 @@
 (defun enum-name (interface-name dom-enum)
   (intern (dot interface-name (name dom-enum))))
 
-(defun enum-entry-name (interface-name dom-enum dom-entry)
-  (intern (muff (dot interface-name
-                     (name dom-enum) (name dom-entry)))))
+(defun enum-name* (interface-name enum-name)
+  (intern
+    (if (position #\. enum-name)
+        (lispify enum-name)
+        (dot interface-name enum-name))))
+
+(defun enum-entry-name (dom-entry)
+  (a:make-keyword (lispify (name dom-entry))))
 
 (defun arg-name (dom-arg)
   (intern (lispify (name dom-arg))))
 
-(defun arg-type (dom-arg)
+(defun arg-type (interface-name dom-arg)
   "Return the lispified type of the DOM arg element."
   ;; TODO intern the interface/enum types into symbols
   (a:eswitch ((dom:attribute dom-arg "type") :test 'string=)
-    ("int" :int)
+    ("int" (a:if-let ((enum (dom:attribute dom-arg "enum")))
+             (list :int (enum-name* interface-name enum))
+             :int))
     ("uint" (a:if-let ((enum (dom:attribute dom-arg "enum")))
-              (list :uint (intern (lispify enum)))
+              (list :uint (enum-name* interface-name enum))
               :uint))
     ("fixed" :fixed)
     ("string"
@@ -163,10 +167,10 @@
     ("array" :array)
     ("fd" :fd)))
 
-(defun transform-arg (dom-arg)
+(defun transform-arg (interface-name dom-arg)
   (let ((name (arg-name dom-arg)))
     `(,name
-       :type ,(arg-type dom-arg)
+       :type ,(arg-type interface-name dom-arg)
        ,@(a:when-let ((summary (summary* dom-arg)))
            `(:documentation ,summary)))))
 
@@ -175,7 +179,7 @@
     (pushnew name *syms-to-export*)
 
     `(client:define-request ,(list name interface opcode)
-       ,(map 'list 'transform-arg
+       ,(map 'list (a:curry 'transform-arg interface)
              (args dom-request))
        ,@(a:when-let ((summary (summary* dom-request)))
            `((:documentation ,summary)))
@@ -187,7 +191,7 @@
 (defun transform-event (dom-event interface opcode)
   (let ((name (event-name dom-event)))
     `(client:define-event ,(list name interface opcode)
-       ,(map 'list 'transform-arg
+       ,(map 'list (a:curry 'transform-arg interface)
              (args dom-event))
        ,@(a:when-let ((summary (summary* dom-event)))
            `((:documentation ,summary)))
@@ -199,8 +203,7 @@
     `(client:define-enum ,name ()
        ,(map 'list
              (lambda (dom-entry)
-               (let ((entry-name (enum-entry-name interface dom-enum dom-entry)))
-                 (pushnew entry-name *syms-to-export*)
+               (let ((entry-name (enum-entry-name dom-entry)))
                  (list entry-name
                        (value dom-entry)
                        :documentation (summary dom-entry))))

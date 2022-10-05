@@ -63,8 +63,7 @@
                                         ((cffi:null-pointer) size '(:read :write) 0))
         (with-proxy (pool (wl-shm.create-pool wl-shm (shm:shm-fd shm) size))
           (setf buffer (wl-shm-pool.create-buffer
-                         pool 0 width height stride
-                         +wl-shm.format-xrgb8888+)))
+                         pool 0 width height stride :xrgb8888)))
 
         ;; Draw the surface
         (cairo:with-surface-and-context (surf (cairo:create-image-surface-for-data
@@ -193,10 +192,10 @@
                         (input-event-codes:+btn-right+ 'btn-right?)
                         (input-event-codes:+btn-middle+ 'btn-mid?)
                         (t (return))))
-                    (= state +wl-pointer.button-state-pressed+)))
+                    (eq state :pressed)))
 
        (when (and (= button input-event-codes:+btn-middle+)
-                  (= state +wl-pointer.button-state-released+))
+                  (eq state :released))
          (setf custom-cursor-on? (not custom-cursor-on?))
          (if custom-cursor-on?
              (wl-pointer.set-cursor wl-pointer latest-pointer-serial
@@ -207,7 +206,7 @@
        ;; The value of the axis's motion is in the same coordinate space as
        ;; :MOTION events.
        (declare (ignore time-ms))
-       (when (= axis +wl-pointer.axis-vertical-scroll+)
+       (when (eq axis :vertical-scroll)
          (setf radius (a:clamp (- radius delta) +min-radius+ +max-radius+))))
       (:frame ()
        ;; Intentionally left blank.
@@ -225,13 +224,14 @@
       (:name (name)
        (format t "Seat name: ~S~%" name))
       (:capabilities (capabilities)
+       (format t "Wl-seat capabilities: ~S~%" capabilities)
        (cond
-         ((and (plusp (logand capabilities +wl-seat.capability-pointer+))
+         ((and (member :pointer capabilities)
                (null wl-pointer))
           (setf wl-pointer (wl-seat.get-pointer wl-seat))
           (push (a:curry 'handle-pointer app)
                 (wl-proxy-hooks wl-pointer)))
-         ((and (zerop (logand capabilities +wl-seat.capability-pointer+))
+         ((and (not (member :pointer capabilities))
                wl-pointer)
           (destroy-proxy wl-pointer)
           (setf wl-pointer nil)))))))
@@ -253,7 +253,7 @@
         (with-proxy (pool (wl-shm.create-pool wl-shm (shm:shm-fd shm) size))
           (setf buffer (wl-shm-pool.create-buffer
                          pool 0 width height stride
-                         +wl-shm.format-argb8888+)))
+                         :argb8888)))
 
         ;; Draw the surface
         (cairo:with-surface-and-context (surf (cairo:create-image-surface-for-data

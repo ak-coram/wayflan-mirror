@@ -50,7 +50,7 @@
         (with-proxy (pool (wl-shm.create-pool wl-shm (shm:shm-fd shm) size))
           (setf buffer (wl-shm-pool.create-buffer
                          pool 0 width height stride
-                         +wl-shm.format-xrgb8888+)))
+                         :xrgb8888)))
 
         ;; Draw checkerboxed background
         (dotimes (y height)
