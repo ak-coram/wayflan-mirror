@@ -11,7 +11,9 @@
            #:wl-uint
            #:+most-positive-wl-uint+
            #:+most-positive-wl-int+
+           #:+most-positive-wl-fixed+
            #:+most-negative-wl-int+
+           #:+most-negative-wl-fixed+
 
            #:read-wl-int
            #:read-wl-uint
@@ -46,7 +48,9 @@ The wayland-wire package defines utilities for communicating primitive data thro
   (:import-from #:xyz.shunter.wayflan.wire
                 #:+most-positive-wl-uint+
                 #:+most-positive-wl-int+
-                #:+most-negative-wl-int+)
+                #:+most-positive-wl-fixed+
+                #:+most-negative-wl-int+
+                #:+most-negative-wl-fixed+)
   (:export #:wl-interface
            #:wl-interface-version
            #:wl-interface-name
@@ -57,9 +61,10 @@ The wayland-wire package defines utilities for communicating primitive data thro
            #:wl-proxy-display
            #:wl-proxy-version
            #:wl-proxy-hooks
+           #:wl-destroyed-proxy
 
            #:wl-display
-           #:wl-destroyed-proxy
+           #:wl-display-pathname
 
            #:find-proxy
            #:destroy-proxy
@@ -83,7 +88,9 @@ The wayland-wire package defines utilities for communicating primitive data thro
 
            #:+most-positive-wl-uint+
            #:+most-positive-wl-int+
+           #:+most-positive-wl-fixed+
            #:+most-negative-wl-int+
+           #:+most-negative-wl-fixed+
 
            #:with-open-display
            #:with-proxy

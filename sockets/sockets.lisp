@@ -381,9 +381,6 @@ in the circular buffer and return the number of iovecs used."
 
   (change-class socket 'active-local-socket-stream))
 
-;; TODO bind
-;; TODO accept
-
 
 
 ;; IO Helper Writers
@@ -410,7 +407,7 @@ Return two values: the number of octets written, and whether the call would have
   (declare (optimize debug))
   (with-slots (fd output-iobuf output-fdbuf) socket
     (when (zerop (cb-length output-iobuf))
-      ;; FIXME: If there's no iovec data, sendmsg() essentially no-ops.
+      ;; KLUDGE If there's no iovec data, sendmsg() essentially no-ops.
       ;; The same issue is found in iolib. This shouldn't be a problem for
       ;; Wayland since every fd sent is part of a greater message, but if this
       ;; is moved to a general-purpose library, this surprising behavior

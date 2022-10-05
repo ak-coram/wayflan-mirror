@@ -58,7 +58,11 @@
   (:local-nicknames (#:a #:alexandria)
                     (#:gray #:trivial-gray-streams)
                     (#:ffi #:xyz.shunter.wayflan.sockets.ffi))
-  (:export #:socket-error
+  (:export #:local-socket-stream
+           #:passive-local-socket-stream
+           #:active-local-socket-stream
+
+           #:socket-error
            #:socket-stream-error
 
            #:connect

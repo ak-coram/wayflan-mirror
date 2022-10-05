@@ -3,30 +3,8 @@
 ;;; Copyright (c) 2022 Samuel Hunter.
 ;;; All rights reserved.
 
-(defsystem #:wayflan/sockets
-  :version "0.0.0"
-  :author "Samuel Hunter"
-  :license "Proprietary"
-
-  :description "Local socket interface optimized Wayland connections"
-
-  :defsystem-depends-on (#:cffi-grovel)
-  :depends-on (#:alexandria
-               #:cffi
-               #:trivial-gray-streams)
-  :pathname #P"sockets/"
-  :serial t
-  :components ((:module #:spec
-                :pathname "spec"
-                :components ((:static-file "socket.h")))
-               (:file "package")
-               (:cffi-grovel-file "grovel")
-               (:file "ffi")
-               (:file "conditions")
-               (:file "sockets")))
-
 (defsystem #:wayflan
-  :version "0.0.0"
+  :version (:read-file-form "version.lisp")
   :author "Samuel Hunter"
   :license "Proprietary"
 
@@ -55,8 +33,30 @@
 
   :in-order-to ((test-op (test-op :wayflan/test))))
 
+(defsystem #:wayflan/sockets
+  :version (:read-file-form "version.lisp")
+  :author "Samuel Hunter"
+  :license "Proprietary"
+
+  :description "Local socket interface optimized Wayland connections"
+
+  :defsystem-depends-on (#:cffi-grovel)
+  :depends-on (#:alexandria
+               #:cffi
+               #:trivial-gray-streams)
+  :pathname #P"sockets/"
+  :serial t
+  :components ((:module #:spec
+                :pathname "spec"
+                :components ((:static-file "socket.h")))
+               (:file "package")
+               (:cffi-grovel-file "grovel")
+               (:file "ffi")
+               (:file "conditions")
+               (:file "sockets")))
+
 (defsystem #:wayflan/examples
-  :version "0.0.0"
+  :version (:read-file-form "version.lisp")
   :author "Samuel Hunter"
   :license "Proprietary"
 
@@ -78,7 +78,7 @@
                (:file "wl-pointer-demo")))
 
 (defsystem #:wayflan/test
-  :version "0.0.0"
+  :version (:read-file-form "version.lisp")
   :author "Samuel Hunter"
   :license "Proprietary"
 

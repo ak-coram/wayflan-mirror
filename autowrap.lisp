@@ -125,7 +125,7 @@
   (intern (dot interface-name (name dom-request))))
 
 (defun event-name (dom-event)
-  (a:make-keyword (string-upcase (name dom-event))))
+  (a:make-keyword (lispify (name dom-event))))
 
 (defun enum-name (interface-name dom-enum)
   (intern (dot interface-name (name dom-enum))))

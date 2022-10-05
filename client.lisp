@@ -34,10 +34,13 @@
   (:method ((interface symbol))
    (wl-interface-name (find-class interface))))
 
+;; FIXME reloading this defclass raises a scary vicious metacircle error :  (
 (defclass wl-interface (standard-class)
-  ((%version :initarg :version :type (integer 0)
+  ((%version :type wire:wl-uint
+             :initarg :version
              :reader wl-interface-version)
-   (%interface-name :initarg :interface-name :type string
+   (%interface-name :type string
+                    :initarg :interface-name
                     :reader wl-interface-name)))
 
 (defmethod closer-mop:validate-superclass ((class wl-interface)
@@ -53,19 +56,21 @@
 ;; Wayland Proxy
 
 (defclass wl-proxy ()
-  ((object-id :type wire:wl-uint
-              :reader wl-proxy-id
-              :accessor %wl-proxy-id)
-   (%display :initarg :display
-             :type wl-display
+  ((%object-id :type wire:wl-uint
+               :reader wl-proxy-id
+               :accessor %wl-proxy-id)
+   (%display :type wl-display
+             :initarg :display
              :reader wl-proxy-display
              :accessor %wl-proxy-display)
-   (%version :initarg :version
+   (%version :type wire:wl-uint
+             :initarg :version
              :reader wl-proxy-version)
+   (%deletedp :type boolean
+              :initform nil
+              :reader deletedp)
    (%hooks :initform ()
-           :accessor wl-proxy-hooks)
-   (%deletedp :initform nil
-              :reader deletedp))
+           :accessor wl-proxy-hooks))
   (:documentation "A protocol object on the client side"))
 
 (defmacro %check-proxy (proxy interface &optional version)
@@ -74,18 +79,23 @@
                   ,@(when version
                       `((>= (wl-proxy-version ,proxy) ,version)))))))
 
+(defclass wl-destroyed-proxy (wl-proxy)
+  ()
+  (:documentation "A proxy that has since been deleted by the compositor."))
+
 (defclass wl-display (wl-proxy)
-  ;; FIXME the table is being polluted with destroyed proxies junk.
-  ((%proxy-table :initform (make-hash-table) :reader %proxy-table)
-   (%socket :initarg :socket :reader %wl-display-socket))
+  ((%pathname :type pathname
+              :initarg :pathname
+              :reader wl-display-pathname)
+   (%proxy-table :type hash-table
+                 :initform (make-hash-table)
+                 :reader %proxy-table)
+   (%socket :type sock:local-socket-stream
+            :initarg :socket :reader %wl-display-socket))
   (:documentation "A connection to the compositor that acts as a proxy to the wl_display singleton object")
   (:version . 1)
   (:interface-name . "wl_display")
   (:metaclass wl-interface))
-
-(defclass wl-destroyed-proxy (wl-proxy)
-  ()
-  (:documentation "A proxy that has since been deleted by the compositor."))
 
 (define-condition wl-error (error)
   ((%object :initarg :object :reader wl-error-object
@@ -103,13 +113,6 @@
                      (wl-error-object cond)
                      (wl-error-message cond)))))
 
-
-;; read-event protocol -- implemented by define-event
-
-(defgeneric %read-event (sender opcode buffer)
-  (:documentation "Read an event sent from PROXY with the given OPCODE and fast-io BUFFER.
-READ-EVENT methods are defined by DEFINE-EVENT-READER."))
-
 (defmethod print-object ((object wl-proxy) stream)
   (print-unreadable-object (object stream :type t :identity t)
     (format stream "~S ~S ~S ~S ~S (~D)"
@@ -117,14 +120,28 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
             :version (wl-proxy-version object)
             :hooks (length (wl-proxy-hooks object)))))
 
+(defmethod print-object ((object wl-display) stream)
+  (print-unreadable-object (object stream :type t :identity t)
+    (format stream "~S ~S ~S ~S ~S ~S ~S (~D)"
+            :on (wl-proxy-pathname object)
+            :id (wl-proxy-id object)
+            :version (wl-proxy-version object)
+            :hooks (length (wl-proxy-hooks object)))))
+
+;; read-event protocol -- implemented by define-event
+
+(defgeneric %read-event (sender opcode buffer)
+  (:documentation "Read an event sent from PROXY with the given OPCODE and fast-io BUFFER.
+READ-EVENT methods are defined by DEFINE-EVENT-READER."))
+
 ;; Proxy management
 
 (defun find-proxy (display id)
   "Return a proxy with the given ID."
   (gethash id (%proxy-table display)))
 
-(defun set-proxy (display id new-proxy)
-  "Assign a proxy with the given id to the table."
+(defun %set-proxy (display id new-proxy)
+  "Assign a proxy with the given id to the table. Return NEW-PROXY."
   (setf (%wl-proxy-id new-proxy) id
         (gethash id (%proxy-table display)) new-proxy))
 
@@ -159,21 +176,23 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
       (unless (gethash (1+ i) proxy-table)
         (return (1+ i))))))
 
-(defun %make-proxy (class display &key object-id version)
+(defun %make-proxy (class parent &key object-id version)
   "Make a new proxy. If OBJECT-ID is provided, it's assumed it came from the server. Otherwise, it will allocate a new object-id from the client side."
-  ;; TODO use PARENT over DISPLAY, to change default version to
-  ;; (min (wl-interface-version class) (wl-proxy-version parent))
-  (let ((new-proxy
-          (make-instance class
-                         :display display
-                         :version (or version (wl-interface-version class)))))
-    (set-proxy display (or object-id (%next-proxy-id display)) new-proxy)
-    new-proxy))
+
+    (let* ((display (wl-proxy-display parent))
+           (new-proxy (make-instance
+                        class
+                        :display display
+                        :version (or version
+                                     (min (wl-interface-version class)
+                                          (wl-proxy-version parent))))))
+      (%set-proxy display (or object-id (%next-proxy-id display))
+                  new-proxy)))
 
 (defmethod initialize-instance :after ((display wl-display)
                                        &key &allow-other-keys)
   (setf (%wl-proxy-display display) display)
-  (set-proxy display 1 display))
+  (%set-proxy display 1 display))
 
 
 ;; Event handling
@@ -231,6 +250,8 @@ underlying stream when WL-DISPLAY-DISCONNECT is called."
       :socket (if (streamp display-name)
                 display-name
                 (connect-socket (display-pathname display-name)))
+      :pathname (unless (streamp display-name)
+                  (display-pathname display-name))
       :version 1)))
 
 (defgeneric wl-display-disconnect (display)
@@ -380,7 +401,7 @@ destructuring lambda-list bound under the case's body."
     ((:new-id &key interface)
      (if interface
          `(%make-proxy ',interface
-                       (wl-proxy-display ,sender)
+                       ,sender
                        :version (wire:read-wl-uint ,buffer))
          `(error "Don't know how to read an untyped :NEW-ID yet.")))
     (:array `(wire:read-wl-array ,buffer))
@@ -456,6 +477,7 @@ OPTIONS:
                (:metaclass wl-interface))))
        ',name)))
 
+;; TODO provide a better interface with enums via converting them into keywords.
 (defmacro define-enum (name () &body (entry-specifiers &rest options))
   "Define a parameter that associates each entry keyword with an index in the array."
   (declare (ignore name options))
@@ -522,7 +544,7 @@ OPTIONS:
                (if new-proxy-interface
                    `(let ((new-proxy (%make-proxy
                                        ,new-proxy-interface
-                                       (wl-proxy-display ,interface)
+                                       ,interface
                                        ,@(when (member 'version lambda-list-tail)
                                            '(:version version)))))
                       ,|@|

@@ -1,6 +1,6 @@
 # Wayflan
 
-Wayland implementation for clients (TODO: and servers).
+Wayland implementation for clients.
 
 ## Dependencies
 
