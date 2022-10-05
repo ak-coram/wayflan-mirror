@@ -18,7 +18,6 @@
   ((:one 1)
    (:two 2)
    (:three 3))
-  (:since 1)
   (:documentation "A standard enum"))
 
 (client:define-enum wf-testable.bitfield-enum ()
@@ -26,7 +25,6 @@
    (:one 1)
    (:two 2)
    (:four 4))
-  (:since 1)
   (:documentation "A bitfield enum")
   (:bitfield t))
 
@@ -36,7 +34,6 @@
    (:two 2)
    (:four 4)
    (:five 5))
-  (:since 1)
   (:documentation "A bitfield enum where some members share values")
   (:bitfield t))
 

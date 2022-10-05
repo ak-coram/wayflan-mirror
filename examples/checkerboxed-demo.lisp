@@ -120,12 +120,14 @@
     (with-slots (wl-display wl-registry wl-shm wl-compositor
                             xdg-wm-base wl-surface xdg-surface xdg-toplevel) app
       (with-open-display (display)
+        ;; Register all globals
         (setf wl-display display
               wl-registry (wl-display.get-registry display))
         (push (a:curry 'handle-registry app wl-registry)
               (wl-proxy-hooks wl-registry))
         (wl-display-roundtrip display)
 
+        ;; Create the surface & give it the toplevel role
         (setf wl-surface (wl-compositor.create-surface wl-compositor)
               xdg-surface (xdg-wm-base.get-xdg-surface
                             xdg-wm-base wl-surface)

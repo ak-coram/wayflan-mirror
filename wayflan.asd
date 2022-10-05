@@ -76,7 +76,8 @@
                (:static-file "lisplogo_256.png")
                (:file "cairo-demo"
                       :depends-on ("lisplogo_256.png"))
-               (:file "wl-pointer-demo")))
+               (:file "wl-pointer-demo")
+               (:file "wl-touch-demo")))
 
 (defsystem #:wayflan/test
   :version (:read-file-form "version.lisp")
