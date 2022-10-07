@@ -72,14 +72,17 @@
                #:posix-shm)
   :pathname #P"examples/"
   :serial nil
-  :components ((:file "global-info")
+  :components ((:static-file "lisplogo_256.png")
+               (:file "global-info")
                (:file "checkerboxed-demo")
-               (:static-file "lisplogo_256.png")
                (:file "cairo-demo"
                       :depends-on ("lisplogo_256.png"))
+
                (:file "wl-pointer-demo")
                (:file "wl-touch-demo")
-               (:file "wl-keyboard-demo")))
+               (:file "wl-keyboard-demo")
+
+               (:file "Waycalc")))
 
 (defsystem #:wayflan/test
   :version (:read-file-form "version.lisp")
