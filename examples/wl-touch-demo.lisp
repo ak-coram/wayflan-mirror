@@ -243,7 +243,7 @@
                  ;; Close the app
                  (return-from run)))
               (wl-proxy-hooks xdg-toplevel))
-        (xdg-toplevel.set-title xdg-toplevel "Wayflan Cairo Demo")
+        (xdg-toplevel.set-title xdg-toplevel "Wayflan wl-touch Demo")
         (wl-surface.commit wl-surface)
 
        (let ((cb (wl-surface.frame wl-surface)))

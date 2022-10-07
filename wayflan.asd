@@ -78,7 +78,8 @@
                (:file "cairo-demo"
                       :depends-on ("lisplogo_256.png"))
                (:file "wl-pointer-demo")
-               (:file "wl-touch-demo")))
+               (:file "wl-touch-demo")
+               (:file "wl-keyboard-demo")))
 
 (defsystem #:wayflan/test
   :version (:read-file-form "version.lisp")

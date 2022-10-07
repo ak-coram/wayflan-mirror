@@ -48,14 +48,36 @@
    (btn-right? :initform nil)
    (btn-mid? :initform nil)
    (radius :initform 50)
-   (last-ptr-events :initform (make-list 10))
+   (messages :initform (make-ring-buffer))
    latest-pointer-serial
    (custom-cursor-on? :initform nil)))
+
+;; Ring buffer rotates out a constant number of messages, to show on the
+;; screen.
+(defconstant +rb-size+ 10)
+(defstruct (ring-buffer (:conc-name #:rb-))
+  (messages (make-array +rb-size+ :initial-element ""))
+  (start 0))
+
+(defun rb-push (message rb)
+  (with-accessors ((messages rb-messages)
+                   (start rb-start)) rb
+    (setf (aref messages start) message
+          start (mod (1+ start) +rb-size+)))
+  rb)
+
+(defun rb-to-string (rb)
+  (with-accessors ((messages rb-messages)
+                   (start rb-start)) rb
+    (with-output-to-string (out)
+      (dotimes (i +rb-size+)
+        (princ (aref messages (mod (+ i start) +rb-size+)) out)
+        (terpri out)))))
 
 (defun draw-frame (app)
   (with-slots (wl-shm width height
                       radius ptr-x ptr-y
-                      btn-left? btn-right? btn-mid? last-ptr-events) app
+                      btn-left? btn-right? btn-mid? messages) app
     (let* ((stride (* width 4))
            (size (* stride height))
            buffer)
@@ -118,10 +140,10 @@
           ;; Draw pointer data at top-left.
           (cairo:set-source-rgb 0 0 0)
           (pango:print-with-attributes
-            ((format nil "Pointer X: ~D/256~%Pointer Y: ~D/256~%Latest events:~{~%~S~}"
+            ((format nil "Pointer X: ~D/256~%Pointer Y: ~D/256~%Latest events:~%~A"
                      (when ptr-x (* 256 ptr-x))
                      (when ptr-x (* 256 ptr-y))
-                     last-ptr-events)
+                     (rb-to-string messages))
              :width width)
             `((:absolute-size ,(min 30 (floor height 15)))
               (:family "Sans Serif")))))
@@ -155,11 +177,9 @@
 (defun handle-pointer (app &rest event)
   (with-slots (wl-surface wl-pointer ptr-x ptr-y radius
                           btn-left? btn-right? btn-mid?
-                          last-ptr-events latest-pointer-serial
+                          messages latest-pointer-serial
                           cursor-surface custom-cursor-on?) app
-    (dotimes (i (1- (length last-ptr-events)))
-      (setf (nth i last-ptr-events) (nth (1+ i) last-ptr-events)))
-    (setf (car (last last-ptr-events)) event)
+    (rb-push (write-to-string event) messages)
     (event-case event
       ;; Save the pointer position whenever it enters and moves the surface.
       ;; Since we only have one surface open, we ignore this value -- but
@@ -342,7 +362,7 @@
                  ;; Close the app
                  (return-from run)))
               (wl-proxy-hooks xdg-toplevel))
-        (xdg-toplevel.set-title xdg-toplevel "Wayflan wl_pointer Demo")
+        (xdg-toplevel.set-title xdg-toplevel "Wayflan wl-pointer Demo")
         (wl-surface.commit wl-surface)
 
        (let ((cb (wl-surface.frame wl-surface)))
