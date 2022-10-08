@@ -1,0 +1,38 @@
+image: debian/stable
+environment:
+  ROSWELL_RELEASE: 21.06.14.110
+  ROSWELL_HOME: /home/build/.roswell
+  ROSWELL_BRANCH: release
+packages:
+  - wget
+secrets:
+  - c0c0dbc4-7244-4b80-8788-78abb5612b5e
+sources:
+  - git@git.sr.ht:~shunter/wayflan
+tasks:
+  - install-roswell: |
+      wget --no-verbose -O- https://github.com/roswell/roswell/releases/download/v$ROSWELL_RELEASE/roswell-$ROSWELL_RELEASE-linux-x86_64.tar.bz2 | tar -jx
+      PATH=~/roswell:$PATH
+
+      # Register wayflan with ASDF
+      ASDF_REG_CONF_DIR=~/.config/common-lisp/source-registry.conf.d
+      mkdir -p $ASDF_REG_CONF_DIR
+      echo "(:tree \"$HOME/wayflan\")" > $ASDF_REG_CONF_DIR/ci.conf
+
+      # Use lisp impl and print configuration
+      ros install sbcl-bin
+      ros use sbcl-bin
+      ros config
+  - build: |
+      PATH=~/roswell:$PATH
+      # Fetch deps
+      ros --eval '(ql:quickload :wayflan/test)'
+  - test-sbcl: |
+      PATH=~/roswell:$PATH
+      ros use sbcl-bin
+      ros --system parachute --system wayflan/test \
+        --eval '(setf *debugger-hook* (lambda (e h) (print e) (uiop:quit 1))) (parachute:test-toplevel :xyz.shunter.wayflan.test)'
+triggers:
+  - action: email
+    condition: failure
+    to: builds@shunter.xyz
