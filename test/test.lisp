@@ -1,7 +1,8 @@
 ;;; test/test.lisp - Wayflan test suite prelude
 ;;;
-;;; Copyright (c) 2022 Samuel Hunter.
-;;; All rights reserved.
+;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>.
+;;; This work is licensed under the BSD 3-Clause License.
+;;; See LICENSE for more details.
 
 (defpackage #:xyz.shunter.wayflan.test
   (:use #:cl)

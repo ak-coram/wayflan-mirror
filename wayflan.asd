@@ -1,12 +1,13 @@
 ;;; wayflan.asd -- System definitions
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz.
-;;; All rights reserved.
+;;; This work is licensed under the BSD 3-Clause License.
+;;; See LICENSE for more details.
 
 (defsystem #:wayflan
   :version (:read-file-form "version.lisp")
   :author "Samuel Hunter"
-  :license "Proprietary"
+  :license "BSD 3-Clause"
 
   :description "Wayland protocol implementation for clients"
 
@@ -37,7 +38,7 @@
 (defsystem #:wayflan/sockets
   :version (:read-file-form "version.lisp")
   :author "Samuel Hunter"
-  :license "Proprietary"
+  :license "BSD 3-Clause"
 
   :description "Local socket interface optimized Wayland connections"
 
@@ -59,7 +60,7 @@
 (defsystem #:wayflan/examples
   :version (:read-file-form "version.lisp")
   :author "Samuel Hunter"
-  :license "Proprietary"
+  :license "BSD 3-Clause"
 
   :description "Example suite for Wayflan"
 
@@ -90,7 +91,7 @@
 (defsystem #:wayflan/test
   :version (:read-file-form "version.lisp")
   :author "Samuel Hunter"
-  :license "Proprietary"
+  :license "BSD 3-Clause"
 
   :description "Test suite for Wayflan"
 

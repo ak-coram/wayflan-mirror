@@ -4,8 +4,9 @@
 ;;; Devault's The Wayland Protocol, §7.3 thru §8.2. The program creates
 ;;; a toplevel surface that shows a moving checkerboard grid.
 ;;;
-;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>
-;;; All rights reserved.
+;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>.
+;;; This work is licensed under the BSD 3-Clause License.
+;;; See LICENSE for more details.
 
 (defpackage #:xyz.shunter.wayflan.examples.checkerboxed-demo
   (:use #:cl

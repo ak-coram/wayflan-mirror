@@ -1,7 +1,8 @@
 ;;; examples/cairo-demo.lisp - A hello world demo using Cairo
 ;;;
-;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>
-;;; All rights reserved.
+;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>.
+;;; This work is licensed under the BSD 3-Clause License.
+;;; See LICENSE for more details.
 ;;;
 ;;; The Lisp Alien Logo at #P"examples/lisplogo_256.png" is
 ;;; Copyright (c) Conrad Barski, licensed under the Public Domain.

@@ -1,7 +1,8 @@
 ;;; sockets.lisp - local sockets for Wayflan
 ;;;
-;; Copyright (c) 2022 Samuel Hunter <samuel@shunter.xyz>
-;;; All rights reserved.
+;;; Copyright (c) 2022 Samuel Hunter <samuel@shunter.xyz>
+;;; This work is licensed under the BSD 3-Clause License.
+;;; See LICENSE for more details.
 
 (in-package #:xyz.shunter.wayflan.sockets)
 (declaim (optimize debug))

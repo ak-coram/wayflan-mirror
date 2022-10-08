@@ -1,7 +1,8 @@
 ;;; sockets/conditions.lisp - Socket condition classes
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter <samuel@shunter.xyz>
-;;; All rights reserved.
+;;; This work is licensed under the BSD 3-Clause License.
+;;; See LICENSE for more details.
 
 (in-package #:xyz.shunter.wayflan.sockets)
 

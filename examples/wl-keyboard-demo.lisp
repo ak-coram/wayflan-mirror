@@ -4,8 +4,9 @@
 ;;; into the appropriate keysym. Type keys on the screen, view the WASD
 ;;; key state, and explore the code in wl-keyboard.
 ;;;
-;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>
-;;; All rights reserved.
+;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>.
+;;; This work is licensed under the BSD 3-Clause License.
+;;; See LICENSE for more details.
 
 (defpackage #:xyz.shunter.wayflan.examples.wl-keyboard-demo
   (:use #:cl #:wayflan-client #:wayflan-client.xdg-shell)

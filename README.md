@@ -2,6 +2,8 @@
 [![builds.sr.ht status](https://builds.sr.ht/~shunter/wayflan/commits/test.yml.svg)](https://builds.sr.ht/~shunter/wayflan/commits/master/test.yml)
 [![Quicklisp status](https://quickdocs.org/badge/wayflan.svg)](https://quickdocs.org/wayflan)
 
+![The library brand image: a crudely drawn plate of flan with an W on the roof](./brand.png)
+
 Wayflan is a from-scratch Wayland client for Common Lisp. It does not bind to
 the reference implementation [libwayland](https://wayland.freedesktop.org/),
 but rather writes to a Wayland socket directly. This gives Wayflan better
