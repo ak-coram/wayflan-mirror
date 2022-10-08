@@ -98,8 +98,7 @@
     (let* ((stride (* width 4))
            (size (* stride height))
            buffer)
-      (shm:with-open-shm-and-mmap* (shm pool-data (:direction :io :permissions '(:user-all))
-                                        ((cffi:null-pointer) size '(:read :write) () 0))
+      (shm:with-open-shm-and-mmap* (shm pool-data (:direction :io) (size))
         (with-proxy (pool (wl-shm.create-pool wl-shm (shm:shm-fd shm) size))
           (setf buffer (wl-shm-pool.create-buffer
                          pool 0 width height stride :xrgb8888)))
@@ -169,8 +168,7 @@
              ;; keyboard format comes along, but for now, :XKB-V1 should
              ;; be the only format compositors for any PC may send.
              (assert (eq format :xkb-v1))
-             (shm:with-mmap (ptr (cffi:null-pointer) size '(:read)
-                                        '(:private) shm 0)
+             (shm:with-mmap (ptr shm size :flags '(:private))
                (let* ((keymap (xkb:xkb-keymap-new-from-string
                                 xkb-context ptr :text-v1 ()))
                       (state (xkb:xkb-state-new keymap)))

@@ -42,8 +42,7 @@
     (let* ((stride (* width 4))
            (size (* stride height))
            buffer)
-      (shm:with-open-shm-and-mmap* (shm pool-data (:direction :io :permissions '(:user-all))
-                                        ((cffi:null-pointer) size '(:read :write) ()  0))
+      (shm:with-open-shm-and-mmap* (shm pool-data (:direction :io) (size))
         (with-proxy (pool (wl-shm.create-pool wl-shm (shm:shm-fd shm) size))
           (setf buffer (wl-shm-pool.create-buffer
                          pool 0 width height stride

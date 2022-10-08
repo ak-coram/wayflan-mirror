@@ -8,7 +8,8 @@
 
 (defpackage #:xyz.shunter.wayflan.examples.waycalc
   (:use #:cl #:wayflan-client #:wayflan-client.xdg-shell)
-  (:local-nicknames (#:a #:alexandria))
+  (:local-nicknames (#:a #:alexandria)
+                    (#:shm #:posix-shm))
   (:export #:run))
 
 (in-package #:xyz.shunter.wayflan.examples.waycalc)
@@ -151,10 +152,8 @@
            (size (* stride height))
            (text-height (text-height height))
            buffer)
-      (posix-shm:with-open-shm-and-mmap* (shm pool-data (:direction :io)
-                                              ((cffi:null-pointer) size
-                                                '(:read :write) () 0))
-        (with-proxy (pool (wl-shm.create-pool wl-shm (posix-shm:shm-fd shm) size))
+      (shm:with-open-shm-and-mmap* (shm pool-data (:direction :io) (size))
+        (with-proxy (pool (wl-shm.create-pool wl-shm (shm:shm-fd shm) size))
           (setf buffer (wl-shm-pool.create-buffer pool 0 width height stride
                                                   :xrgb8888)))
 
@@ -296,12 +295,11 @@
     (event-case event
       ;; Set or update the keyboard key-map
       (:keymap (format fd size)
-       (let ((shm (posix-shm:make-shm fd)))
+       (let ((shm (shm:make-shm fd)))
          (unwind-protect
            (progn
              (assert (eq format :xkb-v1))
-             (posix-shm:with-mmap (ptr (cffi:null-pointer) size '(:read)
-                                      '(:private) shm 0)
+             (shm:with-mmap (ptr shm size :prot '(:read) :flags '(:private))
                (let* ((keymap (xkb:xkb-keymap-new-from-string
                                 xkb-context ptr :text-v1 ()))
                       (state (xkb:xkb-state-new keymap)))
@@ -309,7 +307,7 @@
                  (xkb:xkb-state-unref xkb-state)
                  (setf xkb-keymap keymap
                        xkb-state state))))
-           (posix-shm:close-shm shm))))
+           (shm:close-shm shm))))
 
       ;; Pass thru mod key updates to the xkb state machine
       (:modifiers (serial depressed latched locked group)
