@@ -8,18 +8,18 @@
 
 (in-package #:xyz.shunter.wayflan.client.presentation-time)
 
-(xyz.shunter.wayflan.autowrap:wl-include
+(xyz.shunter.wayflan.autowrap:wl-client-include
   '(#:wayflan #:protocols "presentation-time.xml")
   :export t)
 
 (in-package #:xyz.shunter.wayflan.client.viewporter)
 
-(xyz.shunter.wayflan.autowrap:wl-include
+(xyz.shunter.wayflan.autowrap:wl-client-include
   '(#:wayflan #:protocols "viewporter.xml")
   :export t)
 
 (in-package #:xyz.shunter.wayflan.client.xdg-shell)
 
-(xyz.shunter.wayflan.autowrap:wl-include
+(xyz.shunter.wayflan.autowrap:wl-client-include
   '(#:wayflan #:protocols "xdg-shell.xml")
   :export t)

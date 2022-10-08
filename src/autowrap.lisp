@@ -273,7 +273,7 @@
     ((or pathname string stream)
      input)))
 
-(defmacro wl-include (input &key export exclude-defclasses)
+(defmacro wl-client-include (input &key export exclude-defclasses)
   "Define the collection of interfaces, enums, requests, and events described by INPUT, for use by a Wayland client.
 
 INPUT - A stream to an XML file, a pathname to an XML file, or an XML string.

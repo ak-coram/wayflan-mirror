@@ -27,6 +27,8 @@ transition projects to any breaking changes I make along the way.*
 
 - [Getting Started with Wayflan](./doc/Getting-Started-With-Wayflan.md)
 - [API Reference](./doc/API-Reference.md)
+- [Wayland Book](https://wayland-book.com/) - Teaches Wayland fundamentals and shares examples in C.
+- [Wayland Explorer](https://wayland.app/protocols/) - Read Wayland protocols online
 
 ## Quickstart
 

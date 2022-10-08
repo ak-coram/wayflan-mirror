@@ -113,7 +113,7 @@ This package defines the client's interpretation of various CLOS classes, the ev
   (:local-nicknames (#:a #:alexandria)
                     (#:client #:xyz.shunter.wayflan.client)
                     (#:dom #:org.shirakumo.plump.dom))
-  (:export #:wl-include)
+  (:export #:wl-client-include)
   (:documentation "Wayland XML protocol definitions auto-wrapper.
 
 Wayland is a protocol for a compositor to talk to its clients.
