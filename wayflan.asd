@@ -1,6 +1,6 @@
 ;;; wayflan.asd -- System definitions
 ;;;
-;;; Copyright (c) 2022 Samuel Hunter.
+;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz.
 ;;; All rights reserved.
 
 (defsystem #:wayflan
@@ -73,15 +73,18 @@
   :pathname #P"examples/"
   :serial nil
   :components ((:static-file "lisplogo_256.png")
-               (:file "global-info")
+               (:file "hello-world")
+
                (:file "checkerboxed-demo")
                (:file "cairo-demo"
                       :depends-on ("lisplogo_256.png"))
 
+               ;; Vertical slices showcasing various wl capabilities
                (:file "wl-pointer-demo")
                (:file "wl-touch-demo")
                (:file "wl-keyboard-demo")
 
+               ;; "Practical" application demos
                (:file "Waycalc")))
 
 (defsystem #:wayflan/test
