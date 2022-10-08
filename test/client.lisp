@@ -83,7 +83,7 @@
 
 (p:define-test client-api
   (p:define-test client-api.define-interface
-    (p:of-type client:wl-interface
+    (p:of-type client:wl-interface-class
                (find-class 'wf-testable))
     (p:is = 1
           (client:wl-interface-version 'wf-testable))

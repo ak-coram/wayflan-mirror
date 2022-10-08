@@ -51,7 +51,7 @@ The wayland-wire package defines utilities for communicating primitive data thro
                 #:+most-positive-wl-fixed+
                 #:+most-negative-wl-int+
                 #:+most-negative-wl-fixed+)
-  (:export #:wl-interface
+  (:export #:wl-interface-class
            #:wl-interface-version
            #:wl-interface-name
            #:find-interface-named

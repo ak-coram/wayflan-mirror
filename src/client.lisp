@@ -35,7 +35,7 @@
    (wl-interface-name (find-class interface))))
 
 ;; FIXME reloading this defclass raises a scary vicious metacircle error :  (
-(defclass wl-interface (standard-class)
+(defclass wl-interface-class (standard-class)
   ((%version :type wire:wl-uint
              :initarg :version
              :reader wl-interface-version)
@@ -43,14 +43,16 @@
                     :initarg :interface-name
                     :reader wl-interface-name)))
 
-(defmethod closer-mop:validate-superclass ((class wl-interface)
+(defmethod closer-mop:validate-superclass ((class wl-interface-class)
                                            (superclass standard-class))
   t)
 
-(defmethod initialize-instance :after ((interface wl-interface) &key &allow-other-keys)
+(defmethod initialize-instance :after ((interface wl-interface-class)
+                                       &key &allow-other-keys)
   (%set-interface-named interface (wl-interface-name interface)))
 
-(defmethod reinitialize-instance :after ((interface wl-interface) &key &allow-other-keys)
+(defmethod reinitialize-instance :after ((interface wl-interface-class)
+                                         &key &allow-other-keys)
   (%set-interface-named interface (wl-interface-name interface)))
 
 ;; Wayland Proxy
@@ -95,7 +97,7 @@
   (:documentation "A connection to the compositor that acts as a proxy to the wl_display singleton object")
   (:version . 1)
   (:interface-name . "wl_display")
-  (:metaclass wl-interface))
+  (:metaclass wl-interface-class))
 
 (define-condition wl-error (error)
   ((%object :initarg :object :reader wl-error-object
@@ -500,7 +502,7 @@ OPTIONS:
                    `((:interface-name . ,(first interface-name))))
                ,@(when documentation
                    `((:documentation ,@documentation)))
-               (:metaclass wl-interface))))
+               (:metaclass wl-interface-class))))
        ',name)))
 
 (defun %encode-standard-enum (enum table value)
