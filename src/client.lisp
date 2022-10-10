@@ -5,7 +5,6 @@
 ;;; See LICENSE for more details.
 
 (in-package #:xyz.shunter.wayflan.client)
-(declaim (optimize debug))
 
 
 
@@ -35,7 +34,6 @@
   (:method ((interface symbol))
    (wl-interface-name (find-class interface))))
 
-;; FIXME reloading this defclass raises a scary vicious metacircle error :  (
 (defclass wl-interface-class (standard-class)
   ((%version :type wire:wl-uint
              :initarg :version
@@ -160,13 +158,13 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
 
 (defun %destroy-proxy (proxy)
   (declare (type wl-proxy proxy))
-  (change-class proxy 'wl-destroyed-proxy)
-  (values))
+  (change-class proxy 'wl-destroyed-proxy))
 
 (defgeneric destroy-proxy (proxy)
   (:documentation "Delist the proxy from its display and mark it as destroyed.")
   (:method ((proxy wl-proxy))
-   (%destroy-proxy proxy))
+   (%destroy-proxy proxy)
+   nil)
   (:method ((proxy wl-display))
    (error "Clients cannot destroy a ~S. Call ~S instead."
           'wl-display 'wl-display-disconnect)))
@@ -174,18 +172,16 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
 (defun %clear-proxies (display)
   "Mark all owned proxies as removed."
   (let ((proxy-table (%proxy-table display)))
-    (with-hash-table-iterator (next-item proxy-table)
-      (loop
-        (multiple-value-bind (more? id proxy) (next-item)
-          (unless more? (return))
-          (%destroy-proxy proxy)
-          (remhash id proxy-table)))))
-  (values))
+    (maphash (lambda (id proxy)
+               (declare (ignore id))
+               (%destroy-proxy proxy))
+             proxy-table)
+    (clrhash proxy-table)))
 
 (defun %next-proxy-id (display)
   "Return the next free proxy ID between 1 and #xFEFFFFFF."
-  (let ((proxy-table (%proxy-table display)))
-    (dotimes (i #xfeffffff)
+  (let ((proxy-table (the hash-table (%proxy-table display))))
+    (dotimes (i #xfefffffe)
       (unless (gethash (1+ i) proxy-table)
         (return (1+ i))))))
 
@@ -282,32 +278,18 @@ underlying stream when WL-DISPLAY-DISCONNECT is called."
   (listen (%wl-display-socket display)))
 
 (defun wl-display-dispatch-event (display)
-  "Read and dispatch the display's next event."
-  (let (sender event)
-    (do ((events 0 (1+ events)))
-        ((and (plusp events)
-              (not (wl-display-listen display)))
-         events)
-        (wire:with-input-from-message (buffer sender-id opcode
-                                              nil (%wl-display-socket display))
-          (setf sender (find-proxy display sender-id)
-                event (%read-event sender opcode buffer))
-          (%dispatch-event sender event)))))
-
-(defun wl-display-roundtrip (display)
-  "Block and dispatch events until all requests sent up to this point have been finalized."
-  (let ((callback (wl-display.sync display))
-        (sync-complete nil))
-    (unwind-protect
-      (progn
-        (push (lambda (&rest event)
-                (declare (ignore event))
-                (setf sync-complete t))
-              (wl-proxy-hooks callback))
-
-        (do () (sync-complete)
-            (wl-display-dispatch-event display)))
-      (destroy-proxy callback))))
+  "Read and dispatch the display's next event, or event if more than one is buffered.
+Return the number of events processed."
+  (do (sender (events 0 (1+ events)))
+      ((and (plusp events)
+            (not (wl-display-listen display)))
+       events)
+      (declare (type fixnum events))
+      (wire:with-input-from-message (buffer sender-id opcode
+                                            nil (%wl-display-socket display))
+        (setf sender (find-proxy display sender-id))
+        (%dispatch-event
+          sender (%read-event sender opcode buffer)))))
 
 
 
@@ -679,14 +661,13 @@ OPTIONS:
 
 
 
-;; Utility Macros
+;; Utilities
 
 (defmacro with-open-display ((display &rest options) &body body)
   "Like WITH-OPEN-FILE, but binding DISPLAY to the result of WL-DISPLAY-CONNECT instead of OPEN.
 Executes the body with DISPLAY bound to a freshly connected display."
   `(let ((,display (wl-display-connect ,@options)))
-     (unwind-protect
-       (progn ,@body)
+     (unwind-protect (progn ,@body)
        (wl-display-disconnect ,display))))
 
 (defmacro with-proxy ((var value) &body body)
@@ -723,3 +704,13 @@ Executes the body with DISPLAY bound to a freshly connected display."
   `(evxlambda event-ccase ,@clauses))
 (defmacro evelambda (&body clauses)
   `(evxlambda event-ecase ,@clauses))
+
+(defun wl-display-roundtrip (display)
+  "Block and dispatch events until all requests sent up to this point have been finalized."
+  (with-proxy (callback (wl-display.sync display))
+    (push (lambda (&rest event)
+            (declare (ignore event))
+            (return-from wl-display-roundtrip))
+          (wl-proxy-hooks callback))
+
+    (loop (wl-display-dispatch-event display))))

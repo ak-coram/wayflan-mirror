@@ -139,16 +139,14 @@
   (declare (type wl-int n)
            (type io:output-buffer buffer))
   #+little-endian (io:write32-le n buffer)
-  #+big-endian (io:write32-ge n buffer)
-  (values))
+  #+big-endian (io:write32-ge n buffer))
 
 (defun write-wl-uint (n buffer)
   "Write a unsigned integer to a Wayland fast-io buffer."
   (declare (type wl-uint n)
            (type io:output-buffer buffer))
   #+little-endian (io:writeu32-le n buffer)
-  #+big-endian (io:writeu32-ge n buffer)
-  (values))
+  #+big-endian (io:writeu32-ge n buffer))
 
 (defun write-wl-fixed (n buffer)
   "Write a signed 24.8 decimal number to a Wayland fast-io buffer."
@@ -157,8 +155,7 @@
   (multiple-value-bind (integer-part decimal-part) (floor n 1)
     (write-wl-uint (logior (ash integer-part 8)
                            (floor decimal-part #x1/100))
-                   buffer))
-  (values))
+                   buffer)))
 
 (defun write-wl-string (string buffer)
   "Write a string to a Wayland fast-io buffer."
@@ -174,8 +171,7 @@
     (io:fast-write-sequence octets buffer)
     ;; null terminator and pad to 4 bytes
     (dotimes (i (1+ (padding length)))
-      (io:writeu8 0 buffer)))
-  (values))
+      (io:writeu8 0 buffer))))
 
 (defun write-wl-array (octet-vector buffer)
   "Write an octet vector to a Wayland fast-io buffer."
@@ -187,8 +183,7 @@
     (io:fast-write-sequence octet-vector buffer)
     ;; pad to 4 bytes
     (dotimes (i (padding length))
-      (io:writeu8 0 buffer)))
-  (values))
+      (io:writeu8 0 buffer))))
 
 (defun write-wl-message (sender-id opcode body buffer)
   "Write a message including an octet vector body to a Wayland fast-io buffer."
@@ -202,8 +197,7 @@
                                     opcode)))
     (write-wl-uint sender-id buffer)
     (write-wl-uint length-and-opcode buffer)
-    (io:fast-write-sequence body buffer))
-  (values))
+    (io:fast-write-sequence body buffer)))
 
 (defmacro with-output-as-message ((buffer sender-id opcode &optional output)
                                   &body body)
