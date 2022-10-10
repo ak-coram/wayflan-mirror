@@ -22,7 +22,8 @@
 #.(set-dispatch-macro-character
     #\# #\K (lambda (s c n)
               (declare (ignore c n))
-              (xkb:get-keysym-from-name (read s))))
+              (xkb:xkb-keysym-from-name
+                (read s) '(:no-flags))))
 
 (defparameter +bg-color+ (cl-colors:hsv 30 .5 1))
 (defparameter +fg-color+ (cl-colors:hsv 0 0 .2))

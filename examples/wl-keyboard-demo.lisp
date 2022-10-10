@@ -197,11 +197,9 @@
          (let* ((keycode (+ 8 (aref keys i)))
                 (sym (xkb:xkb-state-key-get-one-sym xkb-state keycode))
                 (msg (format nil "DOWN ~12A (~D), utf8: ~A"
-                             (cffi:with-foreign-pointer-as-string (cstr 128)
-                               (xkb:xkb-keysym-get-name sym cstr 128))
+                             (xkb:xkb-keysym-get-name sym)
                              sym
-                             (cffi:with-foreign-pointer-as-string (cstr 128)
-                               (xkb:xkb-state-key-get-utf8 xkb-state keycode cstr 128)))))
+                             (xkb:xkb-state-key-get-utf8 xkb-state keycode))))
            (update-press-map press-map sym :pressed)
            (rb-push msg messages)
            (princ msg) (terpri))))
@@ -213,11 +211,9 @@
               (sym (xkb:xkb-state-key-get-one-sym xkb-state keycode))
               (msg (format nil "~4A ~12A (~D), utf8: ~A"
                            (if (eq state :pressed) "DOWN" "UP")
-                           (cffi:with-foreign-pointer-as-string (cstr 128)
-                             (xkb:xkb-keysym-get-name sym cstr 128))
+                           (xkb:xkb-keysym-get-name sym)
                            sym
-                           (cffi:with-foreign-pointer-as-string (cstr 128)
-                             (xkb:xkb-state-key-get-utf8 xkb-state keycode cstr 128)))))
+                           (xkb:xkb-state-key-get-utf8 xkb-state keycode))))
          (update-press-map press-map sym state)
          (rb-push msg messages)
          (princ msg) (terpri)))
