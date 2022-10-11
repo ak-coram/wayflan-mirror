@@ -89,27 +89,27 @@ wl-registry globals:
 
 **[Moving Checkerboard Demo](./examples/checkerboxed-demo.lisp)**
 
-[![Screenshot of checkerboxed-demo](./checkerboxed-demo.jpg)](./examples/checkerboxed-demo.lisp)
+[![Screenshot of checkerboxed-demo](./examples/checkerboxed-demo.jpg)](./examples/checkerboxed-demo.lisp)
 
 **[Cairo Demo](./examples/cairo-demo.lisp)**
 
-[![Screenshot of cairo-demo](./cairo-demo.jpg)](./examples/cairo-demo.lisp)
+[![Screenshot of cairo-demo](./examples/cairo-demo.jpg)](./examples/cairo-demo.lisp)
 
 **[wl-pointer Demo](./examples/wl-pointer-demo.lisp)**
 
-[![Screenshot of wl-pointer-demo](./wl-pointer-demo.jpg)](./examples/wl-pointer-demo.lisp)
+[![Screenshot of wl-pointer-demo](./examples/wl-pointer-demo.jpg)](./examples/wl-pointer-demo.lisp)
 
 **[wl-touch Demo](./examples/wl-touch-demo.lisp)**
 
-[![Screenshot of wl-touch-demo](./wl-touch-demo.jpg)](./examples/wl-touch-demo.lisp)
+[![Screenshot of wl-touch-demo](./examples/wl-touch-demo.jpg)](./examples/wl-touch-demo.lisp)
 
 **[wl-keyboard Demo](./examples/wl-keyboard-demo.lisp)**
 
-[![Screenshot of wl-keyboard-demo](./wl-keyboard-demo.jpg)](./examples/wl-keyboard-demo.lisp)
+[![Screenshot of wl-keyboard-demo](./examples/wl-keyboard-demo.jpg)](./examples/wl-keyboard-demo.lisp)
 
 **[Waycalc](./examples/Waycalc.lisp)**
 
-[![Screenshot of Waycalc](./Waycalc.jpg)](./examples/Waycalc.lisp)
+[![Screenshot of Waycalc](./examples/Waycalc.jpg)](./examples/Waycalc.lisp)
 
 ## Dependencies
 
