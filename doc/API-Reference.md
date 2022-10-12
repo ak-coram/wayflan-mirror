@@ -2,6 +2,9 @@
 
 ## Constants
 
+These constants represent the ranges within Wayland's numeric types: signed and
+unsigned integers, and fixed-precision numbers.
+
 - **+most-positive-wl-uint+**
 - **+most-positive-wl-int+**
 - **+most-positive-wl-fixed+**
@@ -28,7 +31,8 @@ All interface classes, such as **wl-display**, are an instance of this class.
 
 **Description:**
 
-Return the interface class known by *name* by the __wl-registry__.
+Return the interface class known by *name* by the __wl-registry__. If there is
+no value, return **nil**.
 
 ## [Class] __wl-proxy__ ()
 
@@ -44,6 +48,11 @@ instance of __wl-interface-class__ except __wl-destroyed-proxy__.
 - **wl-proxy-version** => *number* -- the proxy's bound version.
 
 ## [Accessor] **wl-proxy-hooks** *proxy* => *list*
+
+**Arguments and Values:**
+
+- *proxy* - a __wl-proxy__.
+- *list* - a __list__ of __functions__.
 
 **Description:**
 
@@ -77,7 +86,7 @@ internal Wayland protocol features.
 **Arguments and Values:**
 
 - *display* -- a __wl-display__.
-- *id* -- an __integer__.
+- *id* -- a __positive integer__.
 - *proxy* -- a __wl-proxy__, or **nil**.
 
 **Description:**
