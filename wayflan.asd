@@ -12,6 +12,7 @@
   :description "Wayland protocol implementation for clients"
 
   :depends-on (#:alexandria
+               #:babel
                #:closer-mop
                #:fast-io
                #:plump

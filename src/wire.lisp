@@ -66,9 +66,6 @@
 
 (defun read-wl-string (buffer)
   "Read a string from a Wayland fast-io buffer."
-  ;; NOTE: This assumes strings are ASCII-encoded. I can't find anything in
-  ;; Wayland saying what the character encoding actually is -- unless wayland
-  ;; wants everyone to assume it's a "string" of octets?
   (declare (type io:input-buffer buffer))
   (let* (;; 1- for null byte
          (length (1- (read-wl-uint buffer)))
@@ -78,7 +75,7 @@
                length))
     (dotimes (i (1+ padding)) ;; 1+ for null byte
       (io:fast-read-byte buffer))
-    (map 'string #'code-char octets)))
+    (babel:octets-to-string octets :encoding :utf-8)))
 
 (defun read-wl-array (buffer)
   "Read a array from a Wayland fast-io buffer."
@@ -159,12 +156,9 @@
 
 (defun write-wl-string (string buffer)
   "Write a string to a Wayland fast-io buffer."
-  ;; KLUDGE: This assumes strings are ASCII-encoded. I can't find anything in
-  ;; Wayland saying what the character encoding actually is -- unless wayland
-  ;; wants everyone to assume it's a "string" of octets?
   (declare (type string string)
            (type io:output-buffer buffer))
-  (let* ((octets (map '(vector io:octet) #'char-code string))
+  (let* ((octets (babel:string-to-octets string :encoding :utf-8))
          (length (1+ (length octets)))) ;; +1 for null byte
     ;; length and characters
     (write-wl-uint length buffer)
