@@ -105,6 +105,31 @@ Mark the proxy for destruction and reclaim its ID for use by another proxy.
 Destructor requests specialize on **destroy-proxy** to send the compositor the
 request message.
 
+## [Generic Function] **wl-enum-value** *enum keyword* => *integer*
+
+**Arguments and Values::**
+
+- *enum* -- a __wl-enum__.
+- *keyword* -- a __keyword__ or, if *enum* is a bitfield enum, a list of __keywords__.
+- *integer* -- an integer.
+
+**Description:**
+
+Convert *keyword* into an integer according to *enum*.
+
+## [Generic Function] **wl-enum-keyword** *enum integer* => *keyword*
+
+**Arguments and Values::**
+
+- *enum* -- a __wl-enum__.
+- *integer* -- an integer.
+- *keyword* -- a __keyword__ or, if *enum* is a bitfield enum, a list of __keywords__.
+
+**Description:**
+
+Convert *integer* into a keyword (or, in the case of bitfield enums, a list of
+keywords), according to *enum*.
+
 ## [Condition] __wl-error__ (__error__)
 
 **Description:**

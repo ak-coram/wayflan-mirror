@@ -199,6 +199,14 @@ In Wayflan, enums live as keywords rather than numeric values:
       (wl-proxy-hooks wl-shm))
 ```
 
+Sometimes it's required to marshal enums manually, for example when passing
+around arrays of enum values. Wayflan provides two functions to do that:
+
+```lisp
+(wl-enum-value 'wl-shm.format :c8) ;; => #x20203843
+(wl-enum-keyword 'wl-shm.format 1) ;; => :XRGB8888
+```
+
 Bitfield enums emphasize that the bits of a value are significant, rather than
 the numeric equivalence of a value. Wayflan interprets bitfield enums to mean
 that, if all the bits in an enum member are set in a value, that keyword is a
@@ -208,21 +216,19 @@ keyword.
 
 **Keyword => Number:**
 ```lisp
-;; wl_shell_surface::resize
-(:none)                => 0
-()                     => 0
-(:top)                 => 1
-(:top :left)           => 5
-(:top-left)            => 5
-(:top :left :top-left) => 5
+(wl-enum-value 'wl-shell-surface.resize (:none))                 ;; => 0
+(wl-enum-value 'wl-shell-surface.resize ())                      ;; => 0
+(wl-enum-value 'wl-shell-surface.resize '(:top))                 ;; => 1
+(wl-enum-value 'wl-shell-surface.resize '(:top :left))           ;; => 5
+(wl-enum-value 'wl-shell-surface.resize '(:top :left :top-left)) ;; => 5
+(wl-enum-value 'wl-shell-surface.resize '(:top :left :top-left)) ;; => 5
 ```
 
 **Number => Keyword:**
 ```lisp
-;; wl_shell_surface::resize
-0 => (:none)
-1 => (:top)
-5 => (:top :left :top-left)
+(wl-enum-keyword 'wl-shell-surface.resize 0) ;; => (:none)
+(wl-enum-keyword 'wl-shell-surface.resize 1) ;; => (:top)
+(wl-enum-keyword 'wl-shell-surface.resize 5) ;; => (:top :left :top-left)
 ```
 
 ### [WIP] Adding New Protocols

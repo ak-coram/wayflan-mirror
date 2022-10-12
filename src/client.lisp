@@ -131,13 +131,13 @@
 
 ;; enum coding protocol -- implemented by define-enum
 
-(defgeneric %encode-enum (enum value)
+(defgeneric wl-enum-value (enum value)
   (:documentation
-    "Encode a keyword (or, in the case of a bitfield enum, a list of keywords) into its enum-associated wl-uint."))
+    "Convert a KEYWORD (or, in the case of a bitfield enum, a list of keywords) into an integer according to ENUM."))
 
-(defgeneric %decode-enum (enum value)
+(defgeneric wl-enum-keyword (enum value)
   (:documentation
-    "Decode an integer into its enum-associated keyword (or, in the case of a bitfield enum, a list of keywords)."))
+    "Convert an integer into a KEYWORD (or, in the case of a bitfield enum, a list of keywords) according to ENUM."))
 
 ;; read-event protocol -- implemented by define-event
 
@@ -378,12 +378,12 @@ destructuring lambda-list bound under the case's body."
     ((:int &optional enum)
      (@and `(wire:read-wl-int ,buffer)
            (if enum
-               `(%decode-enum ',enum ,|@|)
+               `(wl-enum-keyword ',enum ,|@|)
                @)))
     ((:uint &optional enum)
      (@and `(wire:read-wl-uint ,buffer)
            (if enum
-               `(%decode-enum ',enum ,|@|)
+               `(wl-enum-keyword ',enum ,|@|)
                @)))
     (:fixed `(wire:read-wl-fixed ,buffer))
     (:array `(wire:read-wl-array ,buffer))
@@ -414,13 +414,13 @@ destructuring lambda-list bound under the case's body."
     ((:int &optional enum)
      `(wire:write-wl-int
         ,(if enum
-             `(%encode-enum ',enum ,place)
+             `(wl-enum-value ',enum ,place)
              place)
         ,buffer))
     ((:uint &optional enum)
      `(wire:write-wl-uint
         ,(if enum
-             `(%encode-enum ',enum ,place)
+             `(wl-enum-value ',enum ,place)
              place)
         ,buffer))
     (:fixed `(wire:write-wl-fixed ,place ,buffer))
@@ -524,12 +524,12 @@ OPTIONS:
     `(let ((table ',(mapcar (%slambda (argument value &key &allow-other-keys)
                               (cons argument value))
                             entry-specifiers)))
-       (defmethod %encode-enum ((enum (eql ',name)) value)
+       (defmethod wl-enum-value ((enum (eql ',name)) value)
          ,(if bitfield
               `(%encode-bitfield-enum enum table value)
               `(%encode-standard-enum enum table value)))
 
-       (defmethod %decode-enum ((enum (eql ',name)) value)
+       (defmethod wl-enum-keyword ((enum (eql ',name)) value)
          ,(if bitfield
               `(%decode-bitfield-enum
                  table value

@@ -70,6 +70,9 @@ The wayland-wire package defines utilities for communicating primitive data thro
            #:find-proxy
            #:destroy-proxy
 
+           #:wl-enum-value
+           #:wl-enum-keyword
+
            #:wl-error
            #:wl-error-object
            #:wl-error-code
