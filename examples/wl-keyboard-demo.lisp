@@ -129,26 +129,6 @@
             (wl-proxy-hooks buffer))
       buffer)))
 
-(defun handle-frame-callback (app callback &rest event)
-  (event-ecase event
-    (:done (time-ms)
-     (declare (ignore time-ms))
-     (with-slots (wl-surface last-frame) app
-       ;; Destroy this callback
-       (destroy-proxy callback)
-
-       ;; Request another frame
-       (setf callback (wl-surface.frame wl-surface))
-       (push (a:curry 'handle-frame-callback app callback)
-             (wl-proxy-hooks callback))
-
-       ;; Submit a new frame for this event
-       (let ((wl-buffer (draw-frame app)))
-         (wl-surface.attach wl-surface wl-buffer 0 0)
-         (wl-surface.damage-buffer
-           wl-surface 0 0 +most-positive-wl-int+ +most-positive-wl-int+)
-         (wl-surface.commit wl-surface))))))
-
 (defun update-press-map (press-map keysym key-state)
   (a:switch ((code-char (xkb:tolower keysym)) :test #'char=)
     (#\w (setf (sbit press-map +w+) (if (eq key-state :pressed) 1 0)))
@@ -157,7 +137,7 @@
     (#\d (setf (sbit press-map +d+) (if (eq key-state :pressed) 1 0)))))
 
 (defun handle-keyboard (app &rest event)
-  (with-slots (xkb-context xkb-keymap xkb-state press-map messages) app
+  (with-slots (xkb-context xkb-keymap xkb-state press-map messages wl-surface) app
     (event-case event
       ;; wl-keyboard's :KEYMAP event provides a key map as a file and size,
       ;; alongside the format used.
@@ -228,7 +208,14 @@
       ;; Implementation is left to the client.
       (:repeat-info (rate delay)
        (format t "Preferred repeat: ~D keys/sec after ~Dms~%"
-               rate delay)))))
+               rate delay)))
+
+    ;; Redraw the surface
+    (let ((buffer (draw-frame app)))
+      (wl-surface.attach wl-surface buffer 0 0)
+      (wl-surface.damage
+        wl-surface 0 0 +most-positive-wl-int+ +most-positive-wl-int+)
+      (wl-surface.commit wl-surface))))
 
 (defun handle-seat (app &rest event)
   (with-slots (wl-seat wl-keyboard) app
@@ -312,10 +299,6 @@
                   (wl-proxy-hooks xdg-toplevel))
             (xdg-toplevel.set-title xdg-toplevel "Wayflan wl-keyboard Demo")
             (wl-surface.commit wl-surface)
-
-            (let ((cb (wl-surface.frame wl-surface)))
-              (push (a:curry 'handle-frame-callback app cb)
-                    (wl-proxy-hooks cb)))
 
             ;; Keep handling events until we get a close signal
             (loop (wl-display-dispatch-event display)))

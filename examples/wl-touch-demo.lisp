@@ -113,28 +113,8 @@
             (wl-proxy-hooks buffer))
       buffer)))
 
-(defun handle-frame-callback (app callback &rest event)
-  (event-ecase event
-    (:done (time-ms)
-     (declare (ignore time-ms))
-     (with-slots (wl-surface last-frame) app
-       ;; Destroy this callback
-       (destroy-proxy callback)
-
-       ;; Request another frame
-       (setf callback (wl-surface.frame wl-surface))
-       (push (a:curry 'handle-frame-callback app callback)
-             (wl-proxy-hooks callback))
-
-       ;; Submit a new frame for this event
-       (let ((wl-buffer (draw-frame app)))
-         (wl-surface.attach wl-surface wl-buffer 0 0)
-         (wl-surface.damage-buffer
-           wl-surface 0 0 +most-positive-wl-int+ +most-positive-wl-int+)
-         (wl-surface.commit wl-surface))))))
-
 (defun handle-touch (app &rest event)
-  (with-slots (points) app
+  (with-slots (points wl-surface) app
     (event-ecase event
       (:down (serial time-ms surface id x y)
        (declare (ignore serial time-ms surface))
@@ -168,7 +148,14 @@
          (setf major new-major
                minor new-minor)))
       (:orientation (id orientation)
-       (setf (point-orientation (gethash id points)) orientation)))))
+       (setf (point-orientation (gethash id points)) orientation)))
+
+    ;; Redraw the surface
+    (let ((buffer (draw-frame app)))
+      (wl-surface.attach wl-surface buffer 0 0)
+      (wl-surface.damage
+        wl-surface 0 0 +most-positive-wl-int+ +most-positive-wl-int+)
+      (wl-surface.commit wl-surface))))
 
 (defun handle-seat (app &rest event)
   (with-slots (wl-seat wl-touch) app
@@ -196,7 +183,6 @@
         (setf wl-registry (wl-display.get-registry display))
         (push (evlambda
                 (:global (name interface version)
-                 (declare (ignore version))
                  (case (a:when-let ((it (find-interface-named interface)))
                          (class-name it))
                    (wl-shm
@@ -245,10 +231,6 @@
               (wl-proxy-hooks xdg-toplevel))
         (xdg-toplevel.set-title xdg-toplevel "Wayflan wl-touch Demo")
         (wl-surface.commit wl-surface)
-
-       (let ((cb (wl-surface.frame wl-surface)))
-         (push (a:curry 'handle-frame-callback app cb)
-               (wl-proxy-hooks cb)))
 
         ;; Keep handling events until we get a close signal
         (loop (wl-display-dispatch-event display))))))

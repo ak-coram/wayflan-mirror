@@ -87,7 +87,8 @@
                (:file "wl-keyboard-demo")
 
                ;; "Practical" application demos
-               (:file "Waycalc")))
+               (:file "Waycalc")
+               (:file "Wayruler")))
 
 (defsystem #:wayflan/test
   :version (:read-file-form "version.lisp")

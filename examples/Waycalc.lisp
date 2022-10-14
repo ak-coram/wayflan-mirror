@@ -223,24 +223,14 @@
             (wl-proxy-hooks buffer))
       buffer)))
 
-(defun handle-frame-callback (app callback &rest event)
+(defun draw-and-commit (app)
   (with-slots (wl-surface) app
-    (event-ecase event
-      (:done (time-ms)
-       (declare (ignore time-ms))
+    (let ((buffer (draw-frame app)))
+      (wl-surface.attach wl-surface buffer 0 0)
+      (wl-surface.damage
+        wl-surface 0 0 +most-positive-wl-int+ +most-positive-wl-int+)
+      (wl-surface.commit wl-surface))))
 
-       ;; Destroy this callback and request the next frame
-       (destroy-proxy callback)
-       (setf callback (wl-surface.frame wl-surface))
-       (push (a:curry 'handle-frame-callback app callback)
-             (wl-proxy-hooks callback))
-
-       ;; Attach the next frame as a new buffer with total damage.
-       (let ((buffer (draw-frame app)))
-         (wl-surface.attach wl-surface buffer 0 0)
-         (wl-surface.damage-buffer
-           wl-surface 0 0 +most-positive-wl-int+ +most-positive-wl-int+)
-         (wl-surface.commit wl-surface))))))
 
 (defun handle-pointer (app &rest event)
   (with-slots (width height pointer-x pointer-y
@@ -266,8 +256,7 @@
              (funcall (cdr (aref buttons y x)) app)))))
       ;; Update hover cell
       (:frame ()
-       (block
-         cells
+       (block cells
          (when hover-active?
            (return-from cells))
          (when (and pointer-x pointer-y)
@@ -277,7 +266,8 @@
                           (<= cy pointer-y (+ cy ch)))
                  (setf hover-cell (list x y))
                  (return-from cells)))))
-         (setf hover-cell nil))))))
+         (setf hover-cell nil))
+       (draw-and-commit app)))))
 
 (defun handle-keydown (app sym)
   (cond
@@ -324,7 +314,8 @@
          (let* ((keycode (+ 8 (aref keys i)))
                 (sym (xkb:xkb-state-key-get-one-sym xkb-state keycode)))
            (when (plusp sym)
-             (handle-keydown app sym)))))
+             (handle-keydown app sym))))
+       (draw-and-commit app))
 
       ;; Handle keys as they're pressed
       (:key (serial time-ms key state)
@@ -332,7 +323,8 @@
        (let* ((keycode (+ 8 key))
               (sym (xkb:xkb-state-key-get-one-sym xkb-state keycode)))
          (when (and (plusp sym) (eq state :pressed))
-           (handle-keydown app sym)))))))
+           (handle-keydown app sym)))
+       (draw-and-commit app)))))
 
 (defun handle-seat (app &rest event)
   (with-slots (wl-seat wl-pointer wl-keyboard) app
@@ -421,11 +413,6 @@
         (xdg-toplevel.set-app-id xdg-toplevel "xyz.shunter.wayflan.waycalc")
         (xdg-toplevel.set-min-size xdg-toplevel 230 280)
         (wl-surface.commit wl-surface)
-
-        ;; Request the first frame
-        (let ((callback (wl-surface.frame wl-surface)))
-          (push (a:curry 'handle-frame-callback app callback)
-                (wl-proxy-hooks callback)))
 
         ;; Handle events forever
         (loop (wl-display-dispatch-event display))))))

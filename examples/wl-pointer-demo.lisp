@@ -154,26 +154,6 @@
             (wl-proxy-hooks buffer))
       buffer)))
 
-(defun handle-frame-callback (app callback &rest event)
-  (event-ecase event
-    (:done (time-ms)
-     (declare (ignore time-ms))
-     (with-slots (wl-surface last-frame) app
-       ;; Destroy this callback
-       (destroy-proxy callback)
-
-       ;; Request another frame
-       (setf callback (wl-surface.frame wl-surface))
-       (push (a:curry 'handle-frame-callback app callback)
-             (wl-proxy-hooks callback))
-
-       ;; Submit a new frame for this event
-       (let ((wl-buffer (draw-frame app)))
-         (wl-surface.attach wl-surface wl-buffer 0 0)
-         (wl-surface.damage-buffer
-           wl-surface 0 0 +most-positive-wl-int+ +most-positive-wl-int+)
-         (wl-surface.commit wl-surface))))))
-
 (defun handle-pointer (app &rest event)
   (with-slots (wl-surface wl-pointer ptr-x ptr-y radius
                           btn-left? btn-right? btn-mid?
@@ -242,7 +222,14 @@
        ;; logical event groups. Applications with more complex event processing
        ;; ought to accumulate each event, and then process them as a group once
        ;; :FRAME is heard.
-       ))))
+       ))
+
+    ;; Redraw the surface
+    (let ((buffer (draw-frame app)))
+      (wl-surface.attach wl-surface buffer 0 0)
+      (wl-surface.damage
+        wl-surface 0 0 +most-positive-wl-int+ +most-positive-wl-int+)
+      (wl-surface.commit wl-surface))))
 
 (defun handle-seat (app &rest event)
   (with-slots (wl-seat wl-pointer) app
@@ -363,10 +350,6 @@
               (wl-proxy-hooks xdg-toplevel))
         (xdg-toplevel.set-title xdg-toplevel "Wayflan wl-pointer Demo")
         (wl-surface.commit wl-surface)
-
-       (let ((cb (wl-surface.frame wl-surface)))
-         (push (a:curry 'handle-frame-callback app cb)
-               (wl-proxy-hooks cb)))
 
         ;; Keep handling events until we get a close signal
         (loop (wl-display-dispatch-event display))))))
