@@ -1,0 +1,17 @@
+Presentation time protocol
+
+Maintainers:
+Pekka Paalanen <pekka.paalanen@collabora.co.uk>
+
+Viewporter: cropping and scaling extension for surface contents
+
+Previously known as wl_scaler.
+
+Maintainers:
+Pekka Paalanen <pekka.paalanen@collabora.co.uk>
+
+xdg shell protocol
+
+Maintainers:
+Jonas Ådahl <jadahl@gmail.com>
+Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
