@@ -112,6 +112,10 @@ wl-registry globals:
 
 [![Screenshot of Waycalc](./examples/Waycalc.jpg)](./examples/Waycalc.lisp)
 
+**[Wayruler](./examples/Wayruler.lisp)**
+
+[![Screenshot of Wayruler](./examples/Wayruler.jpg)](./examples/Wayruler.lisp)
+
 ## Dependencies
 
 While these systems aren't a hard requirement, the examples make use of them,
