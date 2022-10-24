@@ -1,4 +1,4 @@
-;;; wayflan.asd -- System definitions
+;;; wayflan.asd -- common system definitions
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz.
 ;;; This work is licensed under the BSD 3-Clause License.
@@ -9,16 +9,22 @@
   :author "Samuel Hunter"
   :license "BSD 3-Clause"
 
-  :description "Wayland protocol implementation for clients"
+  :description "From-scratch Wayland client implementation"
+
+  :depends-on (#:wayflan-client)
+  :in-order-to ((test-op (test-op :wayflan/test))))
+
+(defsystem #:wayflan/common
+  :version (:read-file-form "version.lisp")
+  :author "Samuel Hunter"
+  :license "BSD 3-Clause"
+
+  :description "PRIVATE: Wayflan common source for client and server"
 
   :defsystem-depends-on (#:cffi-grovel)
   :depends-on (#:alexandria
                #:babel
-               #:cffi
-               #:closer-mop
-               #:plump
-               #:trivial-features)
-
+               #:cffi)
   :pathname #P"src/"
   :serial t
   :components ((:module #:protocols
@@ -30,46 +36,7 @@
                (:file "packages")
                (:cffi-grovel-file "grovel")
                (:file "ffi")
-               (:file "wire")
-               (:file "client")
-
-               (:file "autowrap")
-               (:file "wayland-protocol")
-               (:file "stable-protocols"))
-
-  :in-order-to ((test-op (test-op :wayflan/test))))
-
-(defsystem #:wayflan/examples
-  :version (:read-file-form "version.lisp")
-  :author "Samuel Hunter"
-  :license "BSD 3-Clause"
-
-  :description "Example suite for Wayflan"
-
-  :depends-on (#:wayflan
-               #:cl-colors
-               #:cl-cairo2
-               #:cl-pango
-               #:cl-xkb
-               #:input-event-codes
-               #:posix-shm)
-  :pathname #P"examples/"
-  :serial nil
-  :components ((:static-file "lisplogo_256.png")
-               (:file "hello-world")
-
-               (:file "checkerboxed-demo")
-               (:file "cairo-demo"
-                      :depends-on ("lisplogo_256.png"))
-
-               ;; Vertical slices showcasing various wl capabilities
-               (:file "wl-pointer-demo")
-               (:file "wl-touch-demo")
-               (:file "wl-keyboard-demo")
-
-               ;; "Practical" application demos
-               (:file "Waycalc")
-               (:file "Wayruler")))
+               (:file "wire")))
 
 (defsystem #:wayflan/test
   :version (:read-file-form "version.lisp")
@@ -88,4 +55,4 @@
                (:file "client"))
 
   :perform (test-op (op c)
-             (uiop:symbol-call :parachute :test :xyz.shunter.wayflan.test)))
+             (uiop:symbol-call :parachute :test '#:xyz.shunter.wayflan.test)))

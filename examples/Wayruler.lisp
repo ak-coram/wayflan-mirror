@@ -54,7 +54,7 @@
    (width :type fixnum)
    (height :type fixnum)))
 
-(defun ruler-size-width (app)
+(defun ruler-size-mm (app)
   (with-slots (physical-width output-width output-scale width) app
     (* output-scale physical-width width (/ output-width))))
 
@@ -79,7 +79,7 @@
 
           ;; Put up a line every 10mm or so
           (cairo:set-source-rgb 0 0 0)
-          (do* ((width-mm (ruler-size-width app))
+          (do* ((width-mm (ruler-size-mm app))
                 (mm +minor-step+ (+ mm +minor-step+))
                 (n 1 (1+ n))
                 (major? (zerop (mod n +major-span+))
@@ -192,12 +192,6 @@
         (push (evelambda
                 (:configure (serial)
                  (xdg-surface.ack-configure xdg-surface serial)
-                 ;; When we get the :configure, we should already have our info
-                 ;; on wl-output geometry, so let's print it out here.
-                 (multiple-value-bind (w h) (ruler-size-mm app)
-                   (format t "Surface size: ~Dmm x ~Dmm~%"
-                           (float w) (float h)))
-
                  ;; Draw a new surface
                  (let ((buffer (draw-frame app)))
                    (wl-surface.attach wl-surface buffer 0 0)

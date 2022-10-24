@@ -60,7 +60,7 @@
           (c:with-surface (image (c:image-surface-create-from-png
                                    #.(asdf:component-pathname
                                        (asdf:find-component
-                                         '#:wayflan/examples
+                                         '#:wayflan-client/examples
                                          "lisplogo_256.png")))
                                      :destroy t)
             (c:set-source-surface

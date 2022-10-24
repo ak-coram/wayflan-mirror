@@ -19,7 +19,7 @@ tasks:
       mkdir -p $ASDF_REG_CONF_DIR
       echo "(:tree \"$HOME/wayflan\")" > $ASDF_REG_CONF_DIR/ci.conf
 
-      # Use lisp impl and print configuration
+      # Install and use lisp impl and print configuration
       ros install sbcl-bin
       ros use sbcl-bin
       ros config
@@ -30,8 +30,9 @@ tasks:
   - test-sbcl: |
       PATH=~/roswell:$PATH
       ros use sbcl-bin
-      ros --system parachute --system wayflan/test \
-        --eval '(setf *debugger-hook* (lambda (e h) (print e) (uiop:quit 1))) (parachute:test-toplevel :xyz.shunter.wayflan.test)'
+      ros --system wayflan/test \
+        --eval '(setf *debugger-hook* (lambda (e h) (print e) (uiop:quit 1)))' \
+        --eval '(parachute:test-toplevel :xyz.shunter.wayflan.test)'
 triggers:
   - action: email
     condition: failure
