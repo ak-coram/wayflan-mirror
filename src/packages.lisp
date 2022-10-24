@@ -59,9 +59,8 @@
   (:documentation "PRIVATE: This package is private to Wayflan, and its API is susceptible to change. Please do not use this package in your own code."))
 
 (defpackage #:xyz.shunter.wayflan.wire
-  (:use #:cl)
-  (:local-nicknames (#:a #:alexandria)
-                    (#:ffi #:xyz.shunter.wayflan.ffi))
+  (:use #:cl #:alexandria)
+  (:local-nicknames (#:ffi #:xyz.shunter.wayflan.ffi))
   (:export #:wl-int
            #:wl-uint
            #:wl-fixed
@@ -96,9 +95,8 @@ PRIVATE: This package is private to Wayflan, and its API is susceptible to chang
 
 (defpackage #:xyz.shunter.wayflan.client
   (:nicknames #:wayflan-client)
-  (:use #:cl)
-  (:local-nicknames (#:a #:alexandria)
-                    (#:wire #:xyz.shunter.wayflan.wire))
+  (:use #:cl #:alexandria)
+  (:local-nicknames (#:wire #:xyz.shunter.wayflan.wire))
   (:import-from #:xyz.shunter.wayflan.wire
                 #:wl-uint
                 #:wl-int
@@ -176,9 +174,8 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 This package defines the client's interpretation of various CLOS classes, the event protocol, define- macros to implement wayland protocols, and the core Wayland protocol."))
 
 (defpackage #:xyz.shunter.wayflan.autowrap
-  (:use #:cl)
-  (:local-nicknames (#:a #:alexandria)
-                    (#:client #:xyz.shunter.wayflan.client)
+  (:use #:cl #:alexandria)
+  (:local-nicknames (#:client #:xyz.shunter.wayflan.client)
                     (#:dom #:org.shirakumo.plump.dom))
   (:export #:wl-client-include)
   (:documentation "Wayland XML protocol definitions auto-wrapper.

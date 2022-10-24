@@ -534,18 +534,17 @@ in the circular buffer and return the number of iovecs used."
 
 ;; Serialization
 
-(declaim (inline %wl-primitive-size
-                 %write-wl-uint %write-wl-int %write-wl-string
+(declaim (inline %write-wl-uint %write-wl-int %write-wl-string
                  %write-wl-array %write-wl-string))
 
 (defmacro %wl-primitive-size (type object)
   (ecase type
     (:fd 0)
     ((:int :uint :fixed) 4)
-    (:array (a:with-gensyms (size)
+    (:array (with-gensyms (size)
               `(let ((,size (length ,object)))
                  (+ +wl-word-size+ (padded-size ,size)))))
-    (:string (a:with-gensyms (size)
+    (:string (with-gensyms (size)
                `(let ((,size (1+ (length ,object))))
                   (+ +wl-word-size+ (padded-size ,size)))))))
 
@@ -593,7 +592,7 @@ in the circular buffer and return the number of iovecs used."
     (ffi:memcpy (cffi:inc-pointer cptr (+ offset 4)) cstr size)))
 
 (defmacro send-wl-message ((socket sender-id opcode) types &rest objects)
-  (a:with-gensyms (sock offset cptr size)
+  (with-gensyms (sock offset cptr size)
     (let ((object-syms (loop :repeat (length objects)
                              :collect (gensym))))
       `(let ((,sock ,socket)
@@ -685,7 +684,7 @@ in the circular buffer and return the number of iovecs used."
       (incf-buf buffer body-size))))
 
 (defmacro with-incoming-message ((socket sender-id opcode buf) &body body)
-  (alexandria:with-gensyms (carray size)
+  (with-gensyms (carray size)
     `(%call-with-message
        ,socket
        (lambda (,sender-id ,opcode ,carray ,size)

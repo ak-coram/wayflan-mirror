@@ -76,7 +76,7 @@
   (:documentation "A protocol object on the client side"))
 
 (defmacro %check-proxy (proxy interface &optional version)
-  (a:once-only (proxy)
+  (once-only (proxy)
     `(assert (and (typep ,proxy ',interface)
                   ,@(when version
                       `((>= (wl-proxy-version ,proxy) ,version)))))))
@@ -295,7 +295,7 @@ Return the number of events processed."
 
 (defmacro %specifier-bind (lambda-list specifier &body body)
   "Bind the given LAMBDA-LIST to SPECIFIER, which is transformed to a list of itself if it's not already a list."
-  (a:once-only (specifier)
+  (once-only (specifier)
     `(destructuring-bind ,lambda-list (if (listp ,specifier)
                                           ,specifier
                                           (list ,specifier))
@@ -303,16 +303,16 @@ Return the number of events processed."
 
 (defmacro %slambda (lambda-list &body body)
   "Return a single-arity lambda that destructures the argument as a specifier. before evaluating the body."
-  (a:with-gensyms (specifier)
+  (with-gensyms (specifier)
     `(lambda (,specifier)
        (%specifier-bind ,lambda-list ,specifier
          ,@body))))
 
 (defmacro %option-bind ((&rest option-names) options &body body)
-  (a:once-only (options)
+  (once-only (options)
     (let ((binding-forms
             (mapcar (lambda (option-name)
-                      `(cdr (assoc ,(a:make-keyword option-name) ,options)))
+                      `(cdr (assoc ,(make-keyword option-name) ,options)))
                     option-names)))
       `(let ,(mapcar #'list option-names binding-forms)
          ,@body))))
@@ -339,7 +339,7 @@ Type specializers:
 
 A WLTYPE-XCASE key is a list containing the matching keyword, followed by a
 destructuring lambda-list bound under the case's body."
-  (a:once-only (keyform)
+  (once-only (keyform)
     `(,casename (if (listp ,keyform)
                     (first ,keyform)
                     ,keyform)
@@ -449,7 +449,7 @@ OPTIONS:
          ,(if bitfield
               `(%decode-bitfield-enum
                  table value
-                 ,(a:when-let ((zero-entry (find 0 entry-specifiers
+                 ,(when-let ((zero-entry (find 0 entry-specifiers
                                                  :key #'second :test #'=)))
                     `'(,(first zero-entry))))
               `(%decode-standard-enum enum table value)))
@@ -474,7 +474,7 @@ OPTIONS:
 (:SINCE VERSION) - Minimum interface version of the proxy object."
   (assert (>= 1 (count :new-id arg-specifiers
                        :test #'%wltype=
-                       :key (a:curry #'%sgetf :type))))
+                       :key (curry #'%sgetf :type))))
   (%option-bind (documentation type since) options
     (flet ((arg-to-types (arg)
              ;; The wire types each wayland type is composed of
@@ -522,7 +522,7 @@ OPTIONS:
       (let* ((destructor? (eq (first type) :destructor))
              (new-id-arg (find :new-id arg-specifiers
                                :test #'%wltype=
-                               :key (a:curry #'%sgetf :type)))
+                               :key (curry #'%sgetf :type)))
              (new-id-interface (%sgetf :interface (%sgetf :type new-id-arg)))
              (lambda-list-tail
                ;; Everything but the sender object param
@@ -597,7 +597,7 @@ OPTIONS:
     ;; event (error on the server's fault)
 
     ;; FIXME add support for destructor events.
-    (a:with-gensyms (proxy opcode-sym buffer)
+    (with-gensyms (proxy opcode-sym buffer)
       (flet ((arg-to-form (arg)
                (%specifier-bind (name &key type &allow-other-keys) arg
                  (declare (ignore name))
@@ -662,7 +662,7 @@ Executes the body with DISPLAY bound to a freshly connected display."
        (destroy-proxy ,var))))
 
 (defmacro %event-xcase (xcase event &body clauses)
-  (a:once-only (event)
+  (once-only (event)
     `(,xcase (car ,event)
        ,@(mapcar (lambda (clause)
                    (destructuring-bind (event-name lambda-list &body body) clause
@@ -679,7 +679,7 @@ Executes the body with DISPLAY bound to a freshly connected display."
   `(%event-xcase ecase ,event ,@clauses))
 
 (defmacro evxlambda (event-xcase &body clauses)
-  (a:with-gensyms (event)
+  (with-gensyms (event)
     `(lambda (&rest ,event)
        (,event-xcase ,event ,@clauses))))
 

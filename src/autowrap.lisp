@@ -75,7 +75,7 @@
 
 (defun summary* (elm)
   "Return the summary of an element whose summary is stored in a child description element."
-  (a:when-let ((description (child-of-tag "description" elm)))
+  (when-let ((description (child-of-tag "description" elm)))
     (dom:attribute description "summary")))
 
 (defun parse-value (string)
@@ -123,7 +123,7 @@
   (intern (dot interface-name (name dom-request))))
 
 (defun event-name (dom-event)
-  (a:make-keyword (lispify (name dom-event))))
+  (make-keyword (lispify (name dom-event))))
 
 (defun enum-name (interface-name dom-enum)
   (intern (dot interface-name (name dom-enum))))
@@ -135,7 +135,7 @@
         (dot interface-name enum-name))))
 
 (defun enum-entry-name (dom-entry)
-  (a:make-keyword (lispify (name dom-entry))))
+  (make-keyword (lispify (name dom-entry))))
 
 (defun arg-name (dom-arg)
   (intern (lispify (name dom-arg))))
@@ -143,27 +143,27 @@
 (defun arg-type (interface-name dom-arg)
   "Return the lispified type of the DOM arg element."
   ;; TODO intern the interface/enum types into symbols
-  (a:eswitch ((dom:attribute dom-arg "type") :test 'string=)
-    ("int" (a:if-let ((enum (dom:attribute dom-arg "enum")))
+  (eswitch ((dom:attribute dom-arg "type") :test 'string=)
+    ("int" (if-let ((enum (dom:attribute dom-arg "enum")))
              (list :int (enum-name* interface-name enum))
              :int))
-    ("uint" (a:if-let ((enum (dom:attribute dom-arg "enum")))
+    ("uint" (if-let ((enum (dom:attribute dom-arg "enum")))
               (list :uint (enum-name* interface-name enum))
               :uint))
     ("fixed" :fixed)
     ("string"
      `(:string
-        ,@(a:when-let ((allow-null (dom:attribute dom-arg "allow-null")))
+        ,@(when-let ((allow-null (dom:attribute dom-arg "allow-null")))
             `(:allow-null (string= allow-null "true")))))
     ("object"
      `(:object
-        ,@(a:when-let ((interface (dom:attribute dom-arg "interface")))
+        ,@(when-let ((interface (dom:attribute dom-arg "interface")))
             `(:interface ,(intern (lispify interface))))
-        ,@(a:when-let ((allow-null (dom:attribute dom-arg "allow-null")))
+        ,@(when-let ((allow-null (dom:attribute dom-arg "allow-null")))
             `(:allow-null (string= allow-null "true")))))
     ("new_id"
      `(:new-id
-        ,@(a:when-let ((interface (dom:attribute dom-arg "interface")))
+        ,@(when-let ((interface (dom:attribute dom-arg "interface")))
             `(:interface ,(intern (lispify interface))))))
     ("array" :array)
     ("fd" :fd)))
@@ -172,7 +172,7 @@
   (let ((name (arg-name dom-arg)))
     `(,name
        :type ,(arg-type interface-name dom-arg)
-       ,@(a:when-let ((summary (summary* dom-arg)))
+       ,@(when-let ((summary (summary* dom-arg)))
            `(:documentation ,summary)))))
 
 (defun transform-request (dom-request interface opcode)
@@ -180,23 +180,23 @@
     (pushnew name *syms-to-export*)
 
     `(client:define-request ,(list name interface opcode)
-       ,(map 'list (a:curry 'transform-arg interface)
+       ,(map 'list (curry 'transform-arg interface)
              (args dom-request))
-       ,@(a:when-let ((summary (summary* dom-request)))
+       ,@(when-let ((summary (summary* dom-request)))
            `((:documentation ,summary)))
-       ,@(a:when-let ((type (dom:attribute dom-request "type")))
-           `((:type ,(a:make-keyword (lispify type)))))
-       ,@(a:when-let ((since (dom:attribute dom-request "since")))
+       ,@(when-let ((type (dom:attribute dom-request "type")))
+           `((:type ,(make-keyword (lispify type)))))
+       ,@(when-let ((since (dom:attribute dom-request "since")))
            `((:since ,(parse-integer since)))))))
 
 (defun transform-event (dom-event interface opcode)
   (let ((name (event-name dom-event)))
     `(client:define-event ,(list name interface opcode)
-       ,(map 'list (a:curry 'transform-arg interface)
+       ,(map 'list (curry 'transform-arg interface)
              (args dom-event))
-       ,@(a:when-let ((summary (summary* dom-event)))
+       ,@(when-let ((summary (summary* dom-event)))
            `((:documentation ,summary)))
-       ,@(a:when-let ((since (dom:attribute dom-event "since")))
+       ,@(when-let ((since (dom:attribute dom-event "since")))
            `((:since ,(parse-integer since)))))))
 
 (defun transform-enum (dom-enum interface)
@@ -209,7 +209,7 @@
                        (value dom-entry)
                        :documentation (summary dom-entry))))
              (entries dom-enum))
-       ,@(a:when-let ((summary (summary* dom-enum)))
+       ,@(when-let ((summary (summary* dom-enum)))
            `((:documentation ,summary)))
        ,@(when (string= "true" (bitfield dom-enum))
            `((:bitfield t))))))
@@ -229,25 +229,25 @@
         (:version ,version)
 
         (:interface-name ,(name dom-interface))
-        ,@(a:when-let ((summary (summary* dom-interface)))
+        ,@(when-let ((summary (summary* dom-interface)))
             `((:documentation ,summary))))
 
-       ,@(map 'list
-              (lambda (dom-enum)
-                (transform-enum dom-enum name))
-              enums)
+      ,@(map 'list
+             (lambda (dom-enum)
+               (transform-enum dom-enum name))
+             enums)
 
-       ,@(let ((opcode -1))
-           (map 'list
-                (lambda (dom-request)
-                  (transform-request dom-request name (incf opcode)))
-                requests))
+      ,@(let ((opcode -1))
+          (map 'list
+               (lambda (dom-request)
+                 (transform-request dom-request name (incf opcode)))
+               requests))
 
-       ,@(let ((opcode -1))
-           (map 'list
-                (lambda (dom-event)
-                  (transform-event dom-event name (incf opcode)))
-                events)))))
+      ,@(let ((opcode -1))
+          (map 'list
+               (lambda (dom-event)
+                 (transform-event dom-event name (incf opcode)))
+               events)))))
 
 (defun transform-protocol (dom-protocol)
   (let* ((interface-forms (mapcar #'transform-interface
