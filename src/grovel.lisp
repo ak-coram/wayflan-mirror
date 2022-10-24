@@ -1,10 +1,10 @@
-;;; sockets/grovel.lisp - POSIX.1 socket grovel definition
+;;; src/grovel.lisp - POSIX.1 socket grovel definition
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>
 ;;; This work is licensed under the BSD 3-Clause License.
 ;;; See LICENSE for more details.
 
-(in-package #:xyz.shunter.wayflan.sockets.ffi)
+(in-package #:xyz.shunter.wayflan.ffi)
 (include "errno.h" "string.h" "sys/socket.h" "sys/un.h" "unistd.h")
 
 

@@ -1,4 +1,4 @@
-;;; wayland-protocol.lisp -- Wayland core protocol implementation
+;;; src/wayland-protocol.lisp -- Wayland core protocol implementation
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>.
 ;;; This work is licensed under the BSD 3-Clause License.

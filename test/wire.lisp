@@ -1,4 +1,4 @@
-;;; test/wire.lisp - Wayflan test suite for wire format implementation
+;;; test/wire.lisp -- wire format test suite
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>.
 ;;; This work is licensed under the BSD 3-Clause License.
@@ -8,201 +8,263 @@
 
 
 
-(p:define-test read-wl-int
-  (p:is equal '(#x0BADBEEF
-                #x12345678
-                #x70077007
-                #x00000000)
-        (with-input-from-contents (buf #(#x0BADBEEF
-                                         #x12345678
-                                         #x70077007
-                                         #x00000000))
-          (list (wire:read-wl-int buf)
-                (wire:read-wl-int buf)
-                (wire:read-wl-int buf)
-                (wire:read-wl-int buf)))
-        "read-wl-int can read positive integers")
+(define-test send-empty-message
+  (let ((mocket (make-instance 'mock-socket)))
+    (expect-message mocket 1 0 ())
+    (expect-message mocket 2 3 ())
+    (expect-message mocket 20 10 ())
+    (finish-mock mocket)
 
-  (p:is equal '(#x-0BADBEEF
-                #x-12345678
-                #x-70077007
-                #x-80000000
-                -1)
-        (with-input-from-contents (buf #(#xF4524111
-                                         #xEDCBA988
-                                         #x8FF88FF9
-                                         #x80000000
-                                         #xFFFFFFFF))
-          (list (wire:read-wl-int buf)
-                (wire:read-wl-int buf)
-                (wire:read-wl-int buf)
-                (wire:read-wl-int buf)
-                (wire:read-wl-int buf)))
-        "read-wl-int can read negative integers"))
+    (wire:send-wl-message (mocket 1 0) ())
+    (wire:send-wl-message (mocket 2 3) ())
+    (wire:send-wl-message (mocket 20 10) ())))
 
-(p:define-test write-wl-int
-  (p:is contents= #(#x0BADBEEF
-                    #x12345678
-                    #x70077007
-                    #x7FFFFFFF
-                    #x00000000)
-        (io:with-fast-output (buf)
-          (wire:write-wl-int #x0BADBEEF buf)
-          (wire:write-wl-int #x12345678 buf)
-          (wire:write-wl-int #x70077007 buf)
-          (wire:write-wl-int #x7FFFFFFF buf)
-          (wire:write-wl-int #x00000000 buf))
-        "write-wl-int can write positive integers")
+(define-test recv-empty-message
+  (let ((mocket (make-instance 'mock-socket)))
+    (next-message mocket 1 0 ())
+    (next-message mocket 2 3 ())
+    (next-message mocket 20 10 ())
+    (finish-mock mocket)
 
-  (p:is contents= #(#xF4524111
-                    #xEDCBA988
-                    #x8FF88FF9
-                    #x80000000
-                    #xFFFFFFFF)
-        (io:with-fast-output (buf)
-          (wire:write-wl-int #x-0BADBEEF buf)
-          (wire:write-wl-int #x-12345678 buf)
-          (wire:write-wl-int #x-70077007 buf)
-          (wire:write-wl-int #x-80000000 buf)
-          (wire:write-wl-int -1 buf))
-        "write-wl-int can write negative integers"))
+    (wire:with-incoming-message (mocket sender-id opcode buf)
+      (is = 1 sender-id)
+      (is = 0 opcode))
 
-(p:define-test read-wl-uint
-  (p:is equal '(#xDEADBEEF
-                #x01234567
-                #x89ABCDEF
-                #xFFFFFFFF
-                #X00000000)
-        (with-input-from-contents (buf #(#xDEADBEEF
-                                         #x01234567
-                                         #x89ABCDEF
-                                         #xFFFFFFFF
-                                         #X00000000))
-          (list (wire:read-wl-uint buf)
-                (wire:read-wl-uint buf)
-                (wire:read-wl-uint buf)
-                (wire:read-wl-uint buf)
-                (wire:read-wl-uint buf)))
-        "read-wl-uint can read positive integers"))
+    (wire:with-incoming-message (mocket sender-id opcode buf)
+      (is = 2 sender-id)
+      (is = 3 opcode))
 
-(p:define-test write-wl-uint
-  (p:is contents= #(#xDEADBEEF
-                    #x01234567
-                    #x89ABCDEF
-                    #xFFFFFFFF
-                    #x00000000)
-        (io:with-fast-output (buf)
-          (wire:write-wl-uint #xDEADBEEF buf)
-          (wire:write-wl-uint #x01234567 buf)
-          (wire:write-wl-uint #x89ABCDEF buf)
-          (wire:write-wl-uint #xFFFFFFFF buf)
-          (wire:write-wl-uint #x00000000 buf))
-        "write-wl-uint can write positive integers"))
+    (wire:with-incoming-message (mocket sender-id opcode buf)
+      (is = 20 sender-id)
+      (is = 10 opcode))))
 
-(p:define-test read-wl-fixed
-  (p:is equal '(#x12345624/100
-                #x77777780/100
-                #x000111FF/100
-                #x112233
-                #x7FFFFFFF/100)
-        (with-input-from-contents (buf #(#x12345624
-                                         #x77777780
-                                         #x000111FF
-                                         #x11223300
-                                         #x7FFFFFFF))
-          (list (wire:read-wl-fixed buf)
-                (wire:read-wl-fixed buf)
-                (wire:read-wl-fixed buf)
-                (wire:read-wl-fixed buf)
-                (wire:read-wl-fixed buf)))
-        "read-wl-fixed can read fixed numbers."))
+(define-test send-wl-int
+  (let ((mocket (make-instance 'mock-socket)))
+    (expect-message
+      mocket 0 0
+      '(0 10 #x7fffffff -10 #x-80000000))
+    (finish-mock mocket)
 
-(p:define-test write-wl-fixed
-  ;; TODO figure out what the spec wants for negative numbers. Wayland's spec
-  ;; implies that it's sign-and-magnitude, but I think libwayland implies it's
-  ;; whatever the host system is.
-  (p:is contents= #(#x12345624
-                    #x77777780
-                    #x000111FF
-                    #x11223300
-                    #x7FFFFFFF)
-        (io:with-fast-output (buf)
-          (wire:write-wl-fixed #x12345624/100 buf)
-          (wire:write-wl-fixed #x77777780/100 buf)
-          (wire:write-wl-fixed #x000111FF/100 buf)
-          (wire:write-wl-fixed #x112233 buf)
-          (wire:write-wl-fixed #x7FFFFFFF/100 buf))
-        "write-wl-fixed can write fixed numbers"))
+    (wire:send-wl-message
+      (mocket 0 0) (:int :int :int :int :int)
+      0 10 #x7fffffff -10 #x-80000000)
 
-(p:define-test read-wl-string
-  (p:is string= "hello world"
-        (with-input-from-contents (buf '(12
-                                         #(#x68 #x65 #x6c #x6c
-                                           #x6f #x20 #x77 #x6f
-                                           #x72 #x6c #x64 #x00)))
-          (wire:read-wl-string buf))
-        "read-wl-string correctly reads a string with a null terminator")
+    (fail (wire:send-wl-message (mocket 0 0) (:int) #x-80000001))
+    (fail (wire:send-wl-message (mocket 0 0) (:int) #x80000000))))
 
-  (p:is string= "hello"
-        (with-input-from-contents (buf '(6
-                                         #(#x68 #x65 #x6c #x6c
-                                           #x6f #x00 #x00 #x00)))
-          (wire:read-wl-string buf))
-        "read-wl-string correctly factors in word padding")
+(define-test recv-wl-int
+  (let ((mocket (make-instance 'mock-socket)))
+    (next-message
+      mocket 0 0
+      '(0 10 #x7fffffff -10 #x-80000000))
+    (finish-mock mocket)
 
-  (p:is string= "abcd"
-        (with-input-from-contents (buf '(5
-                                         #(#x61 #x62 #x63 #x64
-                                           #x00 #x00 #x00 #x00)))
-          (wire:read-wl-string buf))
-        "read-wl-string factors in the null terminator when padding"))
+    (wire:with-incoming-message (mocket sender-id opcode buf)
+      (is = 0 sender-id)
+      (is = 0 opcode)
 
-(p:define-test write-wl-string
-  (p:is contents= '(12 #(#x68 #x65 #x6c #x6c
-                         #x6f #x20 #x77 #x6f
-                         #x72 #x6c #x64 #x00))
-        (io:with-fast-output (buf)
-          (wire:write-wl-string "hello world" buf))
-        "write-wl-string correctly writes a string with a null terminator")
+      (is = 0 (wire:read-wl-int buf))
+      (is = 10 (wire:read-wl-int buf))
+      (is = #x7fffffff (wire:read-wl-int buf))
+      (is = -10 (wire:read-wl-int buf))
+      (is = #x-80000000 (wire:read-wl-int buf)))))
 
-  (p:is contents= '(6 #(#x68 #x65 #x6c #x6c
-                        #x6f #x00 #x00 #x00))
-        (io:with-fast-output (buf)
-          (wire:write-wl-string "hello" buf))
-        "write-wl-string correctly pads to the word")
+(define-test send-wl-uint
+  (let ((mocket (make-instance 'mock-socket)))
+    (expect-message
+      mocket 0 0
+      '(0 10 #xffffffff))
+    (finish-mock mocket)
 
-  (p:is contents= '(5 #(#x61 #x62 #x63 #x64
-                        #x00 #x00 #x00 #x00))
-        (io:with-fast-output (buf)
-          (wire:write-wl-string "abcd" buf))
-        "write-wl-string correctly factors in the null terminator when padding"))
+    (wire:send-wl-message
+      (mocket 0 0) (:uint :uint :uint)
+      0 10 #xffffffff)
 
-(p:define-test read-wl-array
-  (p:is equalp #(2 3 5 8)
-        (with-input-from-contents (buf '(4 #(2 3 5 8)))
+    (fail (wire:send-wl-message (mocket 0 0) (:uint) -1))
+    (fail (wire:send-wl-message (mocket 0 0) (:uint) #x100000000))))
+
+(define-test recv-wl-uint
+  (let ((mocket (make-instance 'mock-socket)))
+    (next-message
+      mocket 0 0
+      '(0 10 #xffffffff))
+    (finish-mock mocket)
+
+    (wire:with-incoming-message (mocket sender-id opcode buf)
+      (is = 0 sender-id)
+      (is = 0 opcode)
+
+      (is = 0 (wire:read-wl-uint buf))
+      (is = 10 (wire:read-wl-uint buf))
+      (is = #xffffffff (wire:read-wl-uint buf)))))
+
+(define-test send-wl-fixed
+  (let ((mocket (make-instance 'mock-socket)))
+    (expect-message
+      mocket 0 0
+      '(#x00 #xa00 #x7fffff00))
+    (expect-message
+      mocket 0 0
+      '(#xc80 #x7fffffff #x-80000000))
+    (finish-mock mocket)
+
+    (wire:send-wl-message
+      (mocket 0 0) (:fixed :fixed :fixed)
+      0 10 #x7fffff)
+    (wire:send-wl-message
+      (mocket 0 0) (:fixed :fixed :fixed)
+      25/2 #x7fffffff/100 #x-800000)
+
+    (fail (wire:send-wl-message (mocket 0 0) (:fixed) #x800000))
+    (fail (wire:send-wl-message (mocket 0 0) (:fixed) #x-80000001/100))))
+
+(define-test recv-wl-fixed
+  (let ((mocket (make-instance 'mock-socket)))
+    (next-message
+      mocket 0 0
+      '(#x00 #xa00 #x7fffff00))
+    (next-message
+      mocket 0 0
+      '(#xc80 #x7fffffff #x-80000000))
+    (finish-mock mocket)
+
+    (wire:with-incoming-message (mocket sender-id opcode buf)
+      (is = 0 sender-id)
+      (is = 0 opcode)
+
+      (is = 0 (wire:read-wl-fixed buf))
+      (is = 10 (wire:read-wl-fixed buf))
+      (is = #x7fffff (wire:read-wl-fixed buf)))
+
+    (wire:with-incoming-message (mocket sender-id opcode buf)
+      (is = 0 sender-id)
+      (is = 0 opcode)
+
+      (is = 25/2 (wire:read-wl-fixed buf))
+      (is = #x7fffffff/100 (wire:read-wl-fixed buf))
+      (is = #x-800000 (wire:read-wl-fixed buf)))))
+
+(define-test send-wl-array
+  (let ((mocket (make-instance 'mock-socket)))
+    (expect-message
+      mocket 0 0
+      '(12
+        #(1 2 3 4
+          5 6 7 8
+          9 10 11 12)))
+    (finish-mock mocket)
+
+    (wire:send-wl-message
+      (mocket 0 0) (:array)
+      (make-wl-array '(1 2 3 4 5 6 7 8 9 10 11 12)))))
+
+(define-test recv-wl-array
+  (let ((mocket (make-instance 'mock-socket)))
+    (next-message
+      mocket 0 0
+      '(12
+        #(1 2 3 4
+          5 6 7 8
+          9 10 11 12)
+        10
+        #(10 20 30 40
+          50 60 70 80
+          90 100 123 234)
+        1
+        #(255 1 2 3)))
+    (finish-mock mocket)
+
+    (wire:with-incoming-message (mocket sender-id opcode buf)
+      (is = 0 sender-id)
+      (is = 0 opcode)
+
+      (is equalp #(1 2 3 4 5 6 7 8 9 10 11 12)
           (wire:read-wl-array buf))
-        "read-wl-array correctly reads an array")
-
-  (p:is equalp #(2 3 5 8 13)
-        (with-input-from-contents (buf '(5 #(2 3 5 8
-                                             13 0 0 0)))
+      (is equalp #(10 20 30 40 50 60 70 80 90 100)
           (wire:read-wl-array buf))
-        "read-wl-array factors in word padding"))
+      (is equalp #(255)
+          (wire:read-wl-array buf)))))
 
-(p:define-test write-wl-array
-  (p:is contents= '(4 #(2 3 5 8))
-        (io:with-fast-output (buf)
-          (wire:write-wl-array
-            (make-array 4 :element-type '(unsigned-byte 8)
-                        :initial-contents '(2 3 5 8))
-            buf))
-        "write-wl-array correctly writes an array")
+(define-test send-wl-string
+  (let ((mocket (make-instance 'mock-socket)))
+    (expect-message
+      mocket 0 0
+      '(12
+        #(104 101 108 108
+          111 32 119 111
+          114 108 100 0)))
+    (finish-mock mocket)
 
-  (p:is contents= '(5 #(2 3 5 8
-                        13 0 0 0))
-        (io:with-fast-output (buf)
-          (wire:write-wl-array
-            (make-array 5 :element-type '(unsigned-byte 8)
-                        :initial-contents '(2 3 5 8 13))
-            buf))
-        "write-wl-array correctly pads to the word"))
+    (wire:send-wl-message
+      (mocket 0 0) (:string)
+      "hello world")))
+
+(define-test recv-wl-string
+  (let ((mocket (make-instance 'mock-socket)))
+    (next-message
+      mocket 0 0
+      '(12
+        #(104 101 108 108
+          111 32 119 111
+          114 108 100 0)
+        5
+        #(104 101 108 111
+          0 255 254 253)
+        4
+        #(104 101 108 0)))
+    (finish-mock mocket)
+
+    (wire:with-incoming-message (mocket sender-id opcode buf)
+      (is = 0 sender-id)
+      (is = 0 opcode)
+
+      (is string= "hello world" (wire:read-wl-string buf))
+      (is string= "helo" (wire:read-wl-string buf))
+      (is string= "hel" (wire:read-wl-string buf)))))
+
+(define-test send-various
+  (let ((mocket (make-instance 'mock-socket)))
+    (expect-message
+      mocket 1 3
+      '(256 -256
+        #xa00
+        12
+        #(104 101 108 108
+          111 32 119 111
+          114 108 100 0)
+        4
+        #(10 20 30 40)))
+    (expect-fd mocket 4)
+    (finish-mock mocket)
+
+    (wire:send-wl-message
+      (mocket 1 3) (:uint :int :fixed :fd :string :array)
+      256 -256 10 4
+      "hello world"
+      (make-wl-array '(10 20 30 40)))))
+
+(define-test recv-various
+  (let ((mocket (make-instance 'mock-socket)))
+    (next-message
+      mocket 1 3
+      '(256 -256
+        #xa00
+        6
+        #(104 101 108 108
+          111 0 255 254)
+        5
+        #(10 20 30 40
+          50 255 254 253)))
+    (next-fd mocket 4)
+    (finish-mock mocket)
+
+    (wire:with-incoming-message (mocket sender-id opcode buf)
+      (is = 1 sender-id)
+      (is = 3 opcode)
+
+      (is = 256 (wire:read-wl-uint buf))
+      (is = -256 (wire:read-wl-int buf))
+      (is = 10 (wire:read-wl-fixed buf))
+      (is = 4 (wire:read-fd mocket))
+      (is string= "hello" (wire:read-wl-string buf))
+      (is equalp #(10 20 30 40 50) (wire:read-wl-array buf)))))

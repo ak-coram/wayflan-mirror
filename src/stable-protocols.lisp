@@ -1,4 +1,4 @@
-;;; stable-protocols.lisp -- Wayland stable protocols implementations
+;;; src/stable-protocols.lisp -- Wayland stable protocols implementations
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>.
 ;;; This work is licensed under the BSD 3-Clause License.

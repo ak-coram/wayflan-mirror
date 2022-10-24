@@ -11,13 +11,13 @@
 
   :description "Wayland protocol implementation for clients"
 
+  :defsystem-depends-on (#:cffi-grovel)
   :depends-on (#:alexandria
                #:babel
+               #:cffi
                #:closer-mop
-               #:fast-io
                #:plump
-               #:trivial-features
-               #:wayflan/sockets)
+               #:trivial-features)
 
   :pathname #P"src/"
   :serial t
@@ -28,35 +28,16 @@
                                      (:static-file "viewporter.xml")
                                      (:static-file "xdg-shell.xml")))
                (:file "packages")
+               (:cffi-grovel-file "grovel")
+               (:file "ffi")
                (:file "wire")
                (:file "client")
+
                (:file "autowrap")
                (:file "wayland-protocol")
                (:file "stable-protocols"))
 
   :in-order-to ((test-op (test-op :wayflan/test))))
-
-(defsystem #:wayflan/sockets
-  :version (:read-file-form "version.lisp")
-  :author "Samuel Hunter"
-  :license "BSD 3-Clause"
-
-  :description "Local socket interface optimized Wayland connections"
-
-  :defsystem-depends-on (#:cffi-grovel)
-  :depends-on (#:alexandria
-               #:cffi
-               #:trivial-gray-streams)
-  :pathname #P"sockets/"
-  :serial t
-  :components ((:module #:spec
-                :pathname "spec"
-                :components ((:static-file "socket.h")))
-               (:file "package")
-               (:cffi-grovel-file "grovel")
-               (:file "ffi")
-               (:file "conditions")
-               (:file "sockets")))
 
 (defsystem #:wayflan/examples
   :version (:read-file-form "version.lisp")
@@ -98,12 +79,10 @@
   :description "Test suite for Wayflan"
 
   :depends-on (#:wayflan
-               #:alexandria
-               #:flexi-streams
                #:parachute)
 
   :pathname #P"test/"
-  :serial nil
+  :serial t
   :components ((:file "test")
                (:file "wire")
                (:file "client"))

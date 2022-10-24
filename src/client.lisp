@@ -1,4 +1,4 @@
-;;; client.lisp -- Wayland client implementation
+;;; src/client.lisp -- Wayland client implementation
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>.
 ;;; This work is licensed under the BSD 3-Clause License.
@@ -18,6 +18,7 @@
   "Return the interface linked to the given string NAME."
   (gethash name *interface-table*))
 
+;; Avoiding (setf find-interface-named) to keep it internal
 (defun %set-interface-named (interface name)
   (let ((prev-interface (gethash name *interface-table*)))
     (when (and prev-interface (not (eql prev-interface interface)))
@@ -91,7 +92,7 @@
    (%proxy-table :type hash-table
                  :initform (make-hash-table)
                  :reader %proxy-table)
-   (%socket :type sock:local-socket-stream
+   (%socket :type wire:data-socket
             :initarg :socket :reader %wl-display-socket))
   (:documentation "A connection to the compositor that acts as a proxy to the wl_display singleton object")
   (:version . 1)
@@ -138,12 +139,6 @@
 (defgeneric wl-enum-keyword (enum value)
   (:documentation
     "Convert an integer into a KEYWORD (or, in the case of a bitfield enum, a list of keywords) according to ENUM."))
-
-;; read-event protocol -- implemented by define-event
-
-(defgeneric %read-event (sender opcode buffer)
-  (:documentation "Read an event sent from PROXY with the given OPCODE and fast-io BUFFER.
-READ-EVENT methods are defined by DEFINE-EVENT-READER."))
 
 ;; Proxy management
 
@@ -203,7 +198,6 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
   (setf (%wl-proxy-display display) display)
   (%set-proxy display 1 display))
 
-
 ;; Event handling
 
 (defun %dispatch-event (sender event)
@@ -223,6 +217,10 @@ READ-EVENT methods are defined by DEFINE-EVENT-READER."))
 
   (dolist (hook (wl-proxy-hooks sender))
     (apply hook event)))
+
+(defgeneric %read-event (sender opcode buffer)
+  (:documentation "Read an event sent from PROXY with the given OPCODE and fast-io BUFFER.
+READ-EVENT methods are defined by DEFINE-EVENT-READER."))
 
 ;; Display management
 
@@ -252,14 +250,15 @@ Whether or not WL-DISPLAY-CONNECT opened a stream, it will close the display's
 underlying stream when WL-DISPLAY-DISCONNECT is called."
   (flet ((connect-socket (pathname)
            "Connect to the Unix socket living in PATHNAME."
-           (sock:connect (sock:make-socket)
-                         (uiop:unix-namestring pathname))))
+           (let ((sock (wire:make-socket)))
+             (wire:connect sock (uiop:unix-namestring pathname))
+             sock)))
     (make-instance
       'wl-display
-      :socket (if (streamp display-name)
+      :socket (if (typep display-name 'wire::%socket)
                 display-name
                 (connect-socket (display-pathname display-name)))
-      :pathname (unless (streamp display-name)
+      :pathname (unless (typep display-name 'wire::%socket)
                   (display-pathname display-name))
       :version 1)))
 
@@ -267,7 +266,7 @@ underlying stream when WL-DISPLAY-DISCONNECT is called."
   (:documentation "Close the display's underlying stream and remove all proxies.")
   (:method ((display wl-display))
    (prog1
-     (close (%wl-display-socket display))
+     (wire:close-socket (%wl-display-socket display))
      (%clear-proxies display)))
   (:method ((display wl-destroyed-proxy))
    ;; Assume the proxy was a deleted display -- do nothing.
@@ -275,7 +274,7 @@ underlying stream when WL-DISPLAY-DISCONNECT is called."
 
 (defun wl-display-listen (display)
   "Return whether there is a (partial) message available from the display."
-  (listen (%wl-display-socket display)))
+  (wire:listen-socket (%wl-display-socket display)))
 
 (defun wl-display-dispatch-event (display)
   "Read and dispatch the display's next event, or event if more than one is buffered.
@@ -285,8 +284,7 @@ Return the number of events processed."
             (not (wl-display-listen display)))
        events)
       (declare (type fixnum events))
-      (wire:with-input-from-message (buffer sender-id opcode
-                                            nil (%wl-display-socket display))
+      (wire:with-incoming-message ((%wl-display-socket display) sender-id opcode buffer)
         (setf sender (find-proxy display sender-id))
         (%dispatch-event
           sender (%read-event sender opcode buffer)))))
@@ -365,102 +363,20 @@ destructuring lambda-list bound under the case's body."
 (defmacro %wltype-ecase (keyform &body cases)
   `(%wltype-xcase ecase ,keyform ,@cases))
 
+(declaim (inline %wltype= %sgetf))
+(defun %wltype= (name type)
+  (eq name (if (atom type) type (first type))))
+(defun %sgetf (indicator specifier)
+  ;; Specifier getf -- cut the spec name to getf on the plist tail
+  (unless (atom specifier)
+    (getf (rest specifier) indicator)))
+
 (defmacro @and (&rest clauses)
   (reduce
     (lambda (clause body)
       `(let ((@ ,clause))
          (when @ ,body)))
     clauses :from-end t))
-
-(defmacro %read-arg (type sender buffer)
-  "Read an object from the Wayland buffer depending on the given TYPE."
-  (%wltype-ecase type
-    ((:int &optional enum)
-     (@and `(wire:read-wl-int ,buffer)
-           (if enum
-               `(wl-enum-keyword ',enum ,|@|)
-               @)))
-    ((:uint &optional enum)
-     (@and `(wire:read-wl-uint ,buffer)
-           (if enum
-               `(wl-enum-keyword ',enum ,|@|)
-               @)))
-    (:fixed `(wire:read-wl-fixed ,buffer))
-    (:array `(wire:read-wl-array ,buffer))
-    (:string `(wire:read-wl-string ,buffer))
-    ((:object &key interface allow-null)
-      (a:with-gensyms (id)
-        (@and
-          `(find-proxy (wl-proxy-display ,sender) ,id)
-          (if allow-null
-              `(when ,id ,|@|)
-              @)
-          `(let* ((,id (wire:read-wl-uint ,buffer))
-                  (proxy ,|@|))
-             ,(when interface
-                `(check-type proxy ,interface))
-             proxy))))
-    ((:new-id &key interface)
-     (if interface
-         `(%make-proxy ',interface
-                       ,sender
-                       :version (wire:read-wl-uint ,buffer))
-         `(error "Don't know how to read an untyped :NEW-ID yet.")))
-    (:fd `(sock:read-fd (%wl-display-socket (wl-proxy-display ,sender))))))
-
-(defmacro %write-arg (place type socket buffer)
-  "Write an object stored in PLACE to the Wayland buffer depending on the given TYPE."
-  (%wltype-ecase type
-    ((:int &optional enum)
-     `(wire:write-wl-int
-        ,(if enum
-             `(wl-enum-value ',enum ,place)
-             place)
-        ,buffer))
-    ((:uint &optional enum)
-     `(wire:write-wl-uint
-        ,(if enum
-             `(wl-enum-value ',enum ,place)
-             place)
-        ,buffer))
-    (:fixed `(wire:write-wl-fixed ,place ,buffer))
-    (:array `(wire:write-wl-array ,place ,buffer))
-    (:string `(wire:write-wl-string ,place ,buffer))
-    ((:object &key interface allow-null)
-     (a:once-only (place)
-       (@and
-         `(wl-proxy-id ,place)
-         (if allow-null
-             `(if ,place ,|@| 0)
-             @)
-         (if interface
-             `(progn
-                (check-type ,place ,(if allow-null
-                                        `(or null ,interface)
-                                        interface))
-                ,|@|)
-             @)
-         `(wire:write-wl-uint ,|@| ,buffer))))
-    ((:new-id &key interface)
-     (if interface
-         `(wire:write-wl-uint (wl-proxy-id ,place) ,buffer)
-         `(progn
-            (wire:write-wl-string (wl-interface-name (class-of ,place))
-                                  ,buffer)
-            (wire:write-wl-uint (wl-proxy-version ,place) ,buffer)
-            (wire:write-wl-uint (wl-proxy-id ,place) ,buffer))))
-    (:fd `(sock:write-fd ,socket ,place))))
-
-(defmacro %send-request (sender opcode &body arg-specifiers)
-  (a:with-gensyms (buffer socket)
-    (a:once-only (sender)
-      `(let ((,socket (%wl-display-socket (wl-proxy-display ,sender))))
-         (wire:with-output-as-message (,buffer (wl-proxy-id ,sender)
-                                               ,opcode ,socket)
-           ,@(mapcar
-               (%slambda (name &key type &allow-other-keys)
-                 `(%write-arg ,name ,type ,socket ,buffer))
-               arg-specifiers))))))
 
 (defmacro define-interface (name () &body options)
   "Define a wl-proxy CLOS subclass and assign the interface's name to the interface table, accessible via #'FIND-INTERFACE-NAMED.
@@ -556,76 +472,109 @@ OPTIONS:
 (:DOCUMENTATION STRING) - Provided to the function as its docstring.
 (:TYPE KEYWORD) - So far, only :DESTRUCTOR is a valid type.
 (:SINCE VERSION) - Minimum interface version of the proxy object."
+  (assert (>= 1 (count :new-id arg-specifiers
+                       :test #'%wltype=
+                       :key (a:curry #'%sgetf :type))))
   (%option-bind (documentation type since) options
-    (let* ((destructor? (eq (first type) :destructor))
-           ;; The expression that evaluates to the new proxy's interface, if
-           ;; such proxy will be created. If the type is protocol-defined,
-           ;; then it's the quoted interface name. If the type is known
-           ;; at runtime, then it's picked up from the lambda list.
-           (new-proxy-interface
-             (dolist (specifier arg-specifiers)
-               (let ((type (getf (rest specifier) :type)))
-                 (%wltype-case type
-                   ((:new-id &key interface)
-                    (return (if interface
-                                `(quote ,interface)
-                                'interface-class)))))))
-           (lambda-list-tail
-             (mapcan (%slambda (name &key type &allow-other-keys)
-                       (%wltype-case type
-                         ((:new-id &key interface)
-                          (unless interface
-                            (list new-proxy-interface 'version)))
-                         (t (list name))))
-                     arg-specifiers))
-           (defun-head
-             `(defun ,name ,(list* interface lambda-list-tail)))
-           (defun-body
-             (@and
-               ;; The core of the request procedure is the %send-request macro,
-               `(%send-request ,interface ,opcode
-                  ,@(mapcar
-                      (lambda (specifier)
-                        (%specifier-bind (&key type &allow-other-keys)
-                                         (rest specifier)
-                          (%wltype-case type
-                            (:new-id `(new-proxy ,@(rest specifier)))
-                            (t specifier))))
-                      arg-specifiers))
-               ;; ...and then if a new proxy is created, wrap that around a let
-               (if new-proxy-interface
-                   `(let ((new-proxy (%make-proxy
-                                       ,new-proxy-interface
-                                       ,interface
-                                       ,@(when (member 'version lambda-list-tail)
-                                           '(:version version)))))
-                      ,|@|
-                      new-proxy)
-                   @)
-               ;; ...and finally, add the docstring and typecheck
-               ;; for a full body.
-               `(,@documentation
-                ;; Destructor methods won't need the check-type, because
-                ;; it's already specialized in the parameter list.
-                ,(unless destructor?
-                   `(%check-proxy ,interface ,interface ,(first since)))
-                  ,|@|
-                  ))))
-      ;; If the request is a destructor, put the logic in a DESTROY-PROXY
-      ;; method and use the function name as a synonym.
-      (if destructor?
-          (progn
-            (assert (null arg-specifiers)
-                    (arg-specifiers)
-                    "Destructor request cannot have any parameters")
-            `(prog2
-               (declaim (inline ,name))
-               (,@defun-head
-                 (destroy-proxy ,interface))
-               (defmethod destroy-proxy :before ((,interface ,interface))
-                 ,@defun-body)))
-          `(,@defun-head
-             ,@defun-body)))))
+    (flet ((arg-to-types (arg)
+             ;; The wire types each wayland type is composed of
+             (%specifier-bind (arg-name &key type &allow-other-keys) arg
+               (declare (ignore arg-name))
+               (%wltype-case type
+                 ((:new-id &key interface)
+                  (if interface
+                      '(:uint)
+                      '(:string :uint :uint)))
+                 (:object '(:uint))
+                 (t `(,(if (listp type)
+                           (first type)
+                           type))))))
+           (arg-to-values (arg)
+             (%specifier-bind (arg-name &key type &allow-other-keys) arg
+               ;; The name doubles as the place the object exists.
+               ;; On :new-id, hard symbols 'interface-class and 'version also
+               ;; exist.
+               (%wltype-case type
+                 ((:new-id &key interface)
+                  (if interface
+                      `((wl-proxy-id ,arg-name))
+                      `((wl-interface-name interface-class)
+                        version
+                        (wl-proxy-id ,arg-name))))
+                 ((:object &key interface allow-null)
+                  (list
+                    (@and
+                      `(wl-proxy-id ,arg-name)
+                      (if interface
+                          `(progn
+                             (check-type ,arg-name ,interface)
+                             ,|@|)
+                          @)
+                      (if allow-null
+                          `(if ,arg-name ,|@| 0)
+                          @))))
+                 (((:uint :int) &optional enum)
+                  (if enum
+                      `((wl-enum-value ',enum ,arg-name))
+                      `(,arg-name)))
+                 (t `(,arg-name))))))
+
+      (let* ((destructor? (eq (first type) :destructor))
+             (new-id-arg (find :new-id arg-specifiers
+                               :test #'%wltype=
+                               :key (a:curry #'%sgetf :type)))
+             (new-id-interface (%sgetf :interface (%sgetf :type new-id-arg)))
+             (lambda-list-tail
+               ;; Everything but the sender object param
+               (apply #'append
+                      (mapcar (%slambda (arg-name &key type &allow-other-keys)
+                                (%wltype-case type
+                                  ((:new-id &key interface)
+                                   (unless interface
+                                     '(interface-class version)))
+                                  (t `(,arg-name))))
+                              arg-specifiers)))
+             (defun-body
+               (@and
+                 ;; The core of the request is the send-wl-message macro..
+                 `(wire:send-wl-message
+                    ((%wl-display-socket (wl-proxy-display ,interface))
+                     (wl-proxy-id ,interface) ,opcode)
+                    ,(apply #'append (mapcar #'arg-to-types arg-specifiers))
+                    ,@(apply #'append (mapcar #'arg-to-values arg-specifiers)))
+                 ;; ...which is wrapped in a let if a new proxy is made...
+                 (if new-id-arg
+                     `(let ((,(first new-id-arg)
+                              (%make-proxy
+                                ,(if new-id-interface
+                                     `',new-id-interface
+                                     'interface-class)
+                                ,interface
+                                ,@(unless new-id-interface
+                                    `(:version version)))))
+                        ,|@|
+                        ,(first new-id-arg))
+                     @)
+                 ;; ...and finally, add the docstring and typecheck
+                 `(,@documentation
+                    (%check-proxy ,interface ,interface ,@since)
+                    ,|@|))))
+        ;; If the request is a destructor, put the logic in a DESTROY-PROXY
+        ;; method and use the function name as a synonym.
+        (if destructor?
+            (progn
+              (assert (null arg-specifiers)
+                      (arg-specifiers)
+                      "Destructor request ~S cannot have any parameters"
+                      name)
+              `(progn
+                 (defmethod destroy-proxy :before ((,interface ,interface))
+                   ,@defun-body)
+                 (defun ,name (,interface)
+                   (destroy-proxy ,interface))
+                 ))
+            `(defun ,name (,interface ,@lambda-list-tail)
+               ,@defun-body))))))
 
 (defmacro define-event ((name interface opcode) &body (arg-specifiers &rest options))
   "Define an event to be read by WL-DISPLAY-DISPATCH-EVENT.
@@ -641,23 +590,59 @@ ARG-SPECIFIERS - Each specifier takes the lambda list (name &key type documentat
 OPTIONS:
 
 (:DOCUMENTATION DOCSTRING) - Provided to the event class as its docstring.
-(:SINCE VERSION) - Does nothing.
-(:EVENT-SUPERCLASSES CLASS-NAMES...) - When provided, the event class subclasses these given classes. Otherwise, it subclasses WL-EVENT."
+(:TYPE TYPE) - TODO does nothing. So far, only :DESTRUCTOR is a valid type.
+(:SINCE VERSION) - TODO in the future, asserts that only proxies of this version of higher should receive this event."
   (%option-bind (documentation) options
+    ;; TODO throw an error if the interface's version doesn't support this
+    ;; event (error on the server's fault)
+
+    ;; FIXME add support for destructor events.
     (a:with-gensyms (proxy opcode-sym buffer)
-      `(progn
-         ;; Event reader
-         (defmethod %read-event ((,proxy ,interface)
-                                 (,opcode-sym (eql ,opcode))
-                                 ,buffer)
-           ,@documentation
-           (list ',name
-                 ,@(mapcar
-                     (%slambda (arg-name &key type &allow-other-keys)
-                       (declare (ignore arg-name))
-                       `(%read-arg ,type ,proxy ,buffer))
-                     arg-specifiers)))
-         ',name))))
+      (flet ((arg-to-form (arg)
+               (%specifier-bind (name &key type &allow-other-keys) arg
+                 (declare (ignore name))
+                 (%wltype-ecase type
+                   ((:new-id &key interface)
+                    (if interface
+                        `(%make-proxy ',interface ,proxy
+                                      :object-id (wire:read-wl-uint ,buffer))
+                        `(%make-proxy
+                           (find-interface-named (wire:read-wl-string ,buffer))
+                           ,proxy
+                           :version (wire:read-wl-uint ,buffer)
+                           :object-id (wire:read-wl-uint ,buffer))))
+                   ((:object &key interface allow-null)
+                    (@and
+                      `(find-proxy (wl-proxy-display ,proxy)
+                                   id)
+                      (if allow-null
+                          `(when id ,|@|)
+                          @)
+                      `(let* ((id (wire:read-wl-uint ,buffer))
+                              (proxy ,|@|))
+                         ,(when interface
+                            `(check-type proxy ,interface))
+                         proxy)))
+                   (((:int :uint) &optional enum)
+                    (@and
+                      (if (%wltype= :int type)
+                          `(wire:read-wl-int ,buffer)
+                          `(wire:read-wl-uint ,buffer))
+                      (if enum
+                          `(wl-enum-keyword ',enum ,|@|)
+                          @)))
+                   (:fixed `(wire:read-wl-fixed ,buffer))
+                   (:array `(wire:read-wl-array ,buffer))
+                   (:string `(wire:read-wl-string ,buffer))
+                   (:fd `(wire:read-fd (%wl-display-socket
+                                         (wl-proxy-display ,proxy))))))))
+        `(progn
+           (defmethod %read-event ((,proxy ,interface)
+                                   (,opcode-sym (eql ,opcode))
+                                   ,buffer)
+             ,@documentation
+             (list ',name ,@(mapcar #'arg-to-form arg-specifiers)))
+           ',name)))))
 
 
 

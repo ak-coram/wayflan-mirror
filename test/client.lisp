@@ -1,4 +1,4 @@
-;;; test/client.lisp - Wayflan test suite for client implementation
+;;; test/client.lisp -- Wayflan client test suite
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>.
 ;;; This work is licensed under the BSD 3-Clause License.
@@ -82,43 +82,94 @@
    (x3 :type (:uint wf-testable.funny-bitfield-enum))))
 
 
-(p:define-test client-api
-  (p:define-test client-api.define-interface
-    (p:of-type client:wl-interface-class
-               (find-class 'wf-testable))
-    (p:is = 1
-          (client:wl-interface-version 'wf-testable))
-    (p:is = 1
-          (client:wl-interface-version (find-class 'wf-testable)))
+(define-test client-api
+  (define-test client-api.define-interface
+    (of-type client:wl-interface-class
+             (find-class 'wf-testable))
+    (is = 1
+        (client:wl-interface-version 'wf-testable))
+    (is = 1
+        (client:wl-interface-version (find-class 'wf-testable)))
 
-    (p:is string= "wf_testable"
-          (client:wl-interface-name (find-class 'wf-testable)))
-    (p:is eq (find-class 'wf-testable)
-          (client:find-interface-named "wf_testable"))
+    (is string= "wf_testable"
+        (client:wl-interface-name (find-class 'wf-testable)))
+    (is eq (find-class 'wf-testable)
+        (client:find-interface-named "wf_testable"))
 
-    (p:is string= "Wayflan testable object"
-          (documentation 'wf-testable 'type))
-    (p:is string= "Wayflan testable object"
-          (documentation (find-class 'wf-testable) t)))
+    (is string= "Wayflan testable object"
+        (documentation 'wf-testable 'type))
+    (is string= "Wayflan testable object"
+        (documentation (find-class 'wf-testable) t)))
 
-  (p:define-test client-api.define-request
-    (p:of-type function #'wf-testable.send-empty-request)
-    (p:is string= "Send an empty request"
-          (documentation 'wf-testable.send-empty-request 'function))
-    (p:is string= "Send an empty request"
-          (documentation #'wf-testable.send-empty-request t))))
+  (define-test client-api.define-request
+    (of-type function #'wf-testable.send-empty-request)
+    (is string= "Send an empty request"
+        (documentation 'wf-testable.send-empty-request 'function))
+    (is string= "Send an empty request"
+        (documentation #'wf-testable.send-empty-request t))))
 
-(p:define-test client.requests
-  (let* ((stream (flexi-streams:make-in-memory-output-stream))
-         (display (client:wl-display-connect stream))
+(define-test client.requests
+  (let* ((mocket (make-instance 'mock-socket))
+         (display (client:wl-display-connect mocket))
          (testable (wayflan-client::%make-proxy 'wf-testable display))
-         new-testable new-new-testable)
-    (wf-testable.send-empty-request testable)
+         new-testable
+         new-new-testable)
+    (expect-message
+      ;; wf-testable@2.send-empty-request
+      mocket 2 0
+      ())
+    (expect-message
+      ;; wf-testable@2.send-values
+      mocket 2 1
+      '(;; int-value :int = #x7eadbeef
+        #x7eadbeef
+        ;; uint-value :uint = #xdeadbeef
+        #xdeadbeef
+        ;; fixed-value :fied = #x7deadbeef/100
+        #x7eadbeef
+        ;; array-value :array = #(10 20 30 40)
+        4
+        #(10 20 30 40)
+        ;; string-value :string = "hello world"
+        12
+        #(#x68 #x65 #x6C #x6C
+          #x6F #x20 #x77 #x6F
+          #x72 #x6C #x64 #x00)))
+    (expect-message
+      ;; wf-testable@2.send-wf-testable
+      mocket 2 2
+      '(;; value (:object wf-testable) = #<wf-testable :id 2>
+        2))
+    (expect-message
+      ;; wf-testable@2.send-object
+      mocket 2 3
+      '(;; value :object = #<wl-display :id 1>
+        1))
+    (expect-message
+      ;; wf-testable@2.create-wf-testable
+      mocket 2 4
+      '(;; value (:new-id wf-testable) = #<wf-testable :id 3>
+        3))
+    (expect-message
+      ;; wf-testable@2.create-object
+      mocket 2 5
+      '(;; value :new-id = #<wf-testable :id 4>
+        ;;   name = "wf_testable"
+        12
+        #(#x77 #x66 #x5F #x74
+          #x65 #x73 #x74 #x61
+          #x62 #x6C #x65 #x00)
+        ;;   version = 1
+        1
+        ;;   id = 4
+        4))
+    (finish-mock mocket)
 
+
+    (wf-testable.send-empty-request testable)
     (wf-testable.send-values
-      testable #x7eadbeef #xfeefbeef #x7eadbeef/100
-      (make-array 5 :element-type '(unsigned-byte 8)
-                  :initial-contents '(10 20 30 40 50))
+      testable #x7eadbeef #xdeadbeef #x7eadbeef/100
+      (make-wl-array '(10 20 30 40))
       "hello world")
 
     (wf-testable.send-wf-testable testable testable)
@@ -127,210 +178,127 @@
     (setf new-testable (wf-testable.make-testable testable)
           new-new-testable (wf-testable.make-object testable 'wf-testable 1))
 
-    (p:is = 2 (client:wl-proxy-id testable))
-    (p:is = 3 (client:wl-proxy-id new-testable))
-    (p:is = 4 (client:wl-proxy-id new-new-testable))
+    (is = 2 (client:wl-proxy-id testable))
+    (is = 3 (client:wl-proxy-id new-testable))
+    (is = 4 (client:wl-proxy-id new-new-testable))
 
-    (p:of-type wf-testable testable)
-    (p:of-type wf-testable new-testable)
-    (p:of-type wf-testable new-new-testable)
+    (of-type wf-testable testable)
+    (of-type wf-testable new-testable)
+    (of-type wf-testable new-new-testable)
 
-    (p:is contents=
-          '(;; wf-testable.send-empty-request
-            ;; Message header -- object #2, opcode 0, length 8 bytes
-            2
-            #.(logior (ash 0 0)
-                      (ash 8 16))
+    (client:wl-display-disconnect display)))
 
-            ;; wf-testable.send-values
-            ;; Message header -- object #2, opcode 1, length 48 bytes
-            2
-            #.(logior (ash 1 0)
-                      (ash 48 16))
-            ;; int-value :int = #xdeadbeef
-            #x7eadbeef
-            ;; uint-value :uint = #xfeefbeef
-            #xfeefbeef
-            ;; fixed-value :fixed = #xdeadbeefed
-            #x7eadbeef
-            ;; array-value :array = #(10 20 30 40 50)
-            5
-            #(10 20 30 40
-              50 00 00 00)
-            ;; string-value :string = "hello world"
-            12
-            #(#x68 #x65 #x6C #x6C
-              #x6F #x20 #x77 #x6F
-              #x72 #x6C #x64 #x00)
-
-            ;; wf-testable.send-wf-testable
-            ;; Message header -- object #2, opcode 2, length 12 bytes
-            2
-            #.(logior (ash 2 0)
-                      (ash 12 16))
-            ;; value (:object wf-testable) = #<wf-testable :id 2>
-            2
-
-            ;; wf-testable.send-object
-            ;; Message header -- object #2, opcode 3, length 12 bytes
-            2
-            #.(logior (ash 3 0)
-                      (ash 12 16))
-            ;; value :object = #<wl-display :id 1>
-            1
-
-            ;; wf-testable.create-wf-testable
-            ;; Message header -- object #2, opcode 4, length 12 bytes
-            2
-            #.(logior (ash 4 0)
-                      (ash 12 16))
-            ;; return-value (:new-id wf-testable) = #<wf-testable :id 3>
-            ;;   id = 3
-            3
-
-            ;; wf-testable.create-object
-            ;; Message header -- object #2, opcode 5, length 32 bytes
-            2
-            #.(logior (ash 5 0)
-                      (ash 32 16))
-            ;; return-value :new-id = #<wf-testable :id 4>
-            ;;   name = "wf_testable"
-            12
-            #(#x77 #x66 #x5F #x74
-              #x65 #x73 #x74 #x61
-              #x62 #x6C #x65 #x00)
-            ;;   version = 1
-            1
-            ;;   id = 4
-            4)
-          (flexi-streams:get-output-stream-sequence stream))))
-
-(p:define-test client.events
-  (let* ((stream (flexi-streams:make-in-memory-input-stream
-                   (contents-to-octets
-                     '(;; wf-testable :empty
-                       ;; Message header -- object #2, opcode 0, length 8 bytes
-                       2
-                       #.(logior (ash 0 0)
-                                 (ash 8 16))))))
-         (display (client:wl-display-connect stream))
+(define-test client.events
+  (let* ((mocket (make-instance 'mock-socket))
+         (display (client:wl-display-connect mocket))
          (testable (client::%make-proxy 'wf-testable display))
-         event-emitted?)
+         (count 0))
+    (next-message
+      ;; wf-testable@2.empty
+      mocket 2 0
+      ())
+    (finish-mock mocket)
 
     (push (client:evelambda
             (:empty ()
-             (setf event-emitted? t)))
+             (incf count)))
           (client:wl-proxy-hooks testable))
     (client:wl-display-dispatch-event display)
-    (p:true event-emitted?)))
+    (is = 1 count)
 
-(p:define-test client.enums
-  (let* ((stream (flexi-streams:make-in-memory-output-stream))
-         (display (client:wl-display-connect stream)))
-    (wf-testable.send-enums
-      (client::%make-proxy 'wf-testable display)
-      :one '(:two :four) '(:five))
+    (client:wl-display-disconnect display)))
 
-    (p:is contents=
-          '(;; wf-testable.send-enums
-            ;; Message header -- object #2, opcode 6, length 20 bytes
-            2
-            #.(logior (ash 6 0)
-                      (ash 20 16))
-            ;; x1 (:uint wf-testable.standard-enum) = :one
-            1
-            ;; x2 (:uint wf-testable.bitfield-enum) = (:two :four)
-            6
-            ;; x3 (:uint wf-testable.funny-bitfield-enum) = (:five)
-            5)
-          (flexi-streams:get-output-stream-sequence stream)))
-
-  (let* ((stream (flexi-streams:make-in-memory-input-stream
-                   (contents-to-octets
-                     '(;; wf-testable.receive-enums
-                       ;; Message header -- object 2, opcode 1, length 20 bytes
-                       2
-                       #.(logior (ash 1 0)
-                                 (ash 20 16))
-                       ;; x1 (:uint wf-testable.standard-enum) = :one
-                       1
-                       ;; x2 (:uint wf-testable.bitfield-enum) = (:two :four)
-                       6
-                       ;; x3 (:uint wf-testable.funny-bitfield-enum) = (:five)
-                       5))))
-         (display (client:wl-display-connect stream))
+(define-test client.enums
+  (let* ((mocket (make-instance 'mock-socket))
+         (display (client:wl-display-connect mocket))
          (testable (client::%make-proxy 'wf-testable display))
-         event-emitted?)
+         (count 0))
+    (expect-message
+      ;; wf-testable@2.send-enums
+      mocket 2 6
+      '(;; x1 (:uint wf-testable.standard-enum) = :one
+        1
+        ;; x2 (:uint wf-testable.bitfield-enum) = (:two :four)
+        6
+        ;; x3 (:uint wf-testable.funny-bitfield-enum) = (:five)
+        5))
+    (next-message
+      ;; wf-testable@2.receive-enums
+      mocket 2 1
+      '(;; x1 (:uint wf-testable.standard-enum) = :one
+        1
+        ;; x2 (:uint wf-testable.bitfield-enum) = (:two :four)
+        6
+        ;; x3 (:uint wf-testable.funny-bitfield-enum) = (:five)
+        5))
+    (finish-mock mocket)
+
+    (wf-testable.send-enums testable :one '(:two :four) '(:five))
     (push (client:evelambda
             (:receive-enums (x1 x2 x3)
-             (setf event-emitted? t)
-             (p:is eq :one x1)
-             (p:is equal '(:two :four) x2)
-             (p:is equal '(:one :four :five) x3)))
+             (incf count)
+             (is eq :one x1)
+             (is equal '(:two :four) x2)
+             (is equal '(:one :four :five) x3)))
           (client:wl-proxy-hooks testable))
 
     (client:wl-display-dispatch-event display)
-    (p:true event-emitted?)))
+    (is = 1 count)))
 
 
 
-(p:define-test wayland-protocol.requests
-  (let* ((stream (flexi-streams:make-in-memory-output-stream))
+(define-test wayland-protocol.requests
+  (let* ((mocket (make-instance 'mock-socket))
          ;; Display is always object id #1 by spec
          ;; Subsequent proxies generated by #'CLIENT::%MAKE-PROXY will have
          ;;   consecutive ID's starting from 2 upwards.
-         (display (client:wl-display-connect stream))
-         (new-callback (client:wl-display.sync display))
-         (new-registry (client:wl-display.get-registry display)))
+         (display (client:wl-display-connect mocket))
+         new-callback
+         new-registry)
 
-    (p:of-type client:wl-callback new-callback
+    (expect-message
+      ;; wl-display@1.sync
+      mocket 1 0
+      '(;; callback (:new-id wl-callback) = #<wl-callback :id 2>
+        2))
+
+    (expect-message
+      ;; wl-display@1.new-registry
+      mocket 1 1
+      '(;; registry (:new-id wl-registry) = #<wl-registry :id 3>
+        3))
+
+    (finish-mock mocket)
+
+    (setf new-callback (client:wl-display.sync display)
+          new-registry (client:wl-display.get-registry display))
+
+    (of-type client:wl-callback new-callback
              "wl-display-sync returns a new wl-callback proxy")
-    (p:is = 2 (client:wl-proxy-id new-callback))
+    (is = 2 (client:wl-proxy-id new-callback))
 
-    (p:of-type client:wl-registry new-registry
+    (of-type client:wl-registry new-registry
              "wl-display-get-registry returns a new wl-registry proxy")
-    (p:is = 3 (client:wl-proxy-id new-registry))
+    (is = 3 (client:wl-proxy-id new-registry))))
 
-    (p:is contents=
-          '(;; wl-display-sync
-            ;; Message header -- object #1, opcode 0, length 12 bytes
-            1
-            #.(logior (ash 0 0)
-                      (ash 12 16))
-            ;; callback (:new-id wl-callback) = #<wl-display :id 2>
-            ;;   proxy-id = 2
-            2
+(define-test wayland-protocol.events
+  (let* ((mocket (make-instance 'mock-socket))
+         (display (client:wl-display-connect mocket)))
+    (next-message
+      ;; wl-display@1.error
+      mocket 1 0
+      '(;; object-id :object = #<wl-display :id 1>
+        1
+        ;; code :uint = 3
+        3
+        ;; message :string = "Fatal thing"
+        12
+        #(#x46 #x61 #x74 #x61
+          #x6C #x20 #x74 #x68
+          #x69 #x6E #x67 #x00)))
+    (finish-mock mocket)
 
-            ;; wl-display-get-registry
-            ;; Message header -- object #1, opcode 1, length 12 bytes
-            1
-            #.(logior (ash 1 0)
-                      (ash 12 16))
-            ;; return-value = #<wl-registry :id 3>
-            ;;   proxy id = 3
-            3)
-          (flexi-streams:get-output-stream-sequence stream)
-          "wl-display requests write the correct message")))
+    (fail (client:wl-display-dispatch-event display)
+          'client:wl-error
+          "wl-display :error event transforms into a CLCS error")))
 
-(p:define-test wayland-protocol.events
-  (let* ((stream (flexi-streams:make-in-memory-input-stream
-                   (contents-to-octets
-                     '(;; wl-display :error
-                       ;; Message header -- object #1, opcode 0, length 32 bytes
-                       1
-                       #.(logior (ash 0 0)
-                                 (ash 32 16))
-                       ;; object_id :object = #<wl-display :id 1>
-                       ;;   id = 1
-                       1
-                       ;; code :uint = 0
-                       0
-                       ;; message :string = "Bad thing"
-                       10
-                       #(#x42 #x61 #x64 #x20
-                         #x74 #x68 #x69 #x6E
-                         #x67 #x00 #x00 #x00)))))
-         (display (client:wl-display-connect stream)))
-    (p:fail (client:wl-display-dispatch-event display)
-            'client:wl-error
-            "wl-display :error event transforms into a CLCS error")))

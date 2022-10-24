@@ -1,4 +1,4 @@
-;;; autowrap.lisp -- Wayland XML protocol definitions auto-wrapper
+;;; src/autowrap.lisp -- Wayland XML protocol definitions auto-wrapper
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>.
 ;;; This work is licensed under the BSD 3-Clause License.

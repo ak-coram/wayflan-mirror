@@ -1,10 +1,10 @@
-;;; sockets/ffi.lisp - POSIX.1 socket foreign function interface
+;;; src/ffi.lisp - POSIX.1 socket foreign function interface
 ;;;
 ;;; Copyright (c) 2022 Samuel Hunter <samuel (at) shunter (dot) xyz>.
 ;;; This work is licensed under the BSD 3-Clause License.
 ;;; See LICENSE for more details.
 
-(in-package #:xyz.shunter.wayflan.sockets.ffi)
+(in-package #:xyz.shunter.wayflan.ffi)
 
 
 

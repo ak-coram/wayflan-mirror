@@ -102,12 +102,15 @@
        (case (a:when-let ((it (find-interface-named interface)))
                (class-name it))
          (wl-shm
+           (format t "found shm~%")
            (setf wl-shm (wl-registry.bind
                           registry name 'wl-shm 1)))
          (wl-compositor
+           (format t "found compositor~%")
            (setf wl-compositor (wl-registry.bind
                                  registry name 'wl-compositor 4)))
          (xdg-wm-base
+           (format t "found xdg~%")
            (setf xdg-wm-base (wl-registry.bind
                                registry name 'xdg-wm-base 1))
            (push (evelambda
