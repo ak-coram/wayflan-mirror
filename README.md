@@ -2,7 +2,7 @@
 [![builds.sr.ht status](https://builds.sr.ht/~shunter/wayflan/commits/test.yml.svg)](https://builds.sr.ht/~shunter/wayflan/commits/master/test.yml)
 [![Quicklisp status](https://quickdocs.org/badge/wayflan.svg)](https://quickdocs.org/wayflan)
 
-![The library brand image: a crudely drawn plate of flan with an W on the roof](./brand.png)
+![The library brand image: a crudely drawn plate of flan with a W on the roof](./brand.png)
 
 Wayflan is a from-scratch Wayland client for Common Lisp. It does not bind to
 the reference implementation [libwayland](https://wayland.freedesktop.org/),
@@ -27,8 +27,8 @@ transition projects to any breaking changes I make along the way.*
 
 ## Documentation
 
-- [Getting Started with Wayflan](./doc/Getting-Started-With-Wayflan.md)
-- [API Reference](./doc/API-Reference.md)
+- [Getting Started with Wayflan](./doc/Getting-Started-With-Wayflan-Client.md)
+- [API Reference for Wayflan](./doc/Client-API-Reference.md)
 - [Wayland Home Page](https://wayland.freedesktop.org/)
 - [Wayland Book](https://wayland-book.com/) - Teaches Wayland fundamentals and shares examples in C.
 - [Wayland Explorer](https://wayland.app/protocols/) - Browse Wayland protocols online
@@ -41,7 +41,7 @@ This snippet connects to a Wayland compositor to print all global variables the
 client can bind to:
 
 ```lisp
-(require :wayflan) ;; or (require :wayflan-client)
+(require :wayflan-client) ;; or (require :wayflan)
 (use-package :wayflan-client)
 
 (defun run ()

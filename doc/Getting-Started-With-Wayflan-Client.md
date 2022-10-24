@@ -1,4 +1,4 @@
-# Getting Started with Wayflan
+# Getting Started with Wayflan Client
 
 This document target those familiar with Wayland fundamentals, and aims to
 explain how each Wayland concept integrates into Wayflan.

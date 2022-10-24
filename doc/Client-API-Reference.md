@@ -7,9 +7,18 @@ unsigned integers, and fixed-precision numbers.
 
 - **+most-positive-wl-uint+**
 - **+most-positive-wl-int+**
-- **+most-positive-wl-fixed+**
 - **+most-negative-wl-int+**
+- **+most-positive-wl-fixed+**
 - **+most-negative-wl-fixed+**
+
+## Types
+
+These lisp types represent the range of possible values of Wayland numbers.
+
+- **wl-int** (between -2^31 and 2^31-1)
+- **wl-uint** (between 0 and 2^31-1)
+- **wl-fixed** (between -0x800000 and 0x80000000/256)
+- **wl-array** (vector of 8-bit bytes)
 
 ## [Metaclass] __wl-interface-class__ (__standard-class__)
 
