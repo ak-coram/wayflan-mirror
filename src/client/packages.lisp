@@ -84,18 +84,16 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 
 This package defines the client's interpretation of various CLOS classes, the event protocol, define- macros to implement wayland protocols, and the core Wayland protocol."))
 
-(defpackage #:xyz.shunter.wayflan.autowrap
+(defpackage #:xyz.shunter.wayflan.client.scanner
   (:use #:cl #:alexandria)
   (:local-nicknames (#:client #:xyz.shunter.wayflan.client)
                     (#:dom #:org.shirakumo.plump.dom))
-  (:export #:wl-client-include)
-  (:documentation "Wayland XML protocol definitions auto-wrapper.
+  (:export #:wl-include)
+  (:documentation "PRIVATE: Wayland XML protocol definitions auto-wrapper.
 
-Wayland is a protocol for a compositor to talk to its clients.
-The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
-The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
+This package defines WL-INCLUDE, a macro that transforms a Wayland protocol described in an XML file into wayflan definition forms.
 
-This package defines WL-INCLUDE, a macro that transforms a Wayland protocol described in an XML file into wayflan definition forms."))
+PRIVATE: This package is private to Wayflan, and its API is susceptible to change. Please do not use this package in your own code."))
 
 (defpackage #:xyz.shunter.wayflan.client.presentation-time
   (:use #:cl #:xyz.shunter.wayflan.client)

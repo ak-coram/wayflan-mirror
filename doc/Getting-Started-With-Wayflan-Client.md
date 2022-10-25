@@ -240,30 +240,22 @@ from libwayland in their own separate packages:
 - `wayflan-client.viewporter`
 - `wayflan-client.xdg-shell`
 
-The package `wayflan-autowrap` enables users to integrate other protocols with
-Wayflan via XML files:
+Wayflan provides the ASDF component `:wayflan-client-impl` to add protocol
+bindings to a package:
 
 ```lisp
-(defpackage #:super-protocol
-  (:use #:cl #:wayflan-demo))
-(in-package #:super-protocol)
-
-(wayflan-autowrap:wl-client-include
-  '(#:super-system "zsuper-protocol-v1.xml"))
+(defsystem foo
+  :defsystem-depends-on (#:wayflan-client)
+  :components ((:file "package")
+               ;; :wayflan-client-impl expects an XML document called "so-and-so-unstable-v1.xml"
+               ;; and generates bindings within the package #:FOO-PACKAGE.
+               (:wayflan-client-impl "so-and-so-unstable-v1"
+                                     :in-package "foo-package"
+                                     :depends-on ("package"))))
 ```
 
-There are four possible input types for `wl-client-include`:
-
-- (**Recommended**) an ASDF component pathname, starting with the system name,
-  followed by each (sub)component name ending with a `:static-file` XML file
-  component.
-- A pathname to an XML file.
-- An String containing an XML document.
-- A input stream to an XML document.
-
-**WIP:** I ultimately want to move this API to be primarily an ASDF component,
-but to keep this as a separate living API to let lisp hackers add protocols
-without fiddling with defsystem files.
+**WIP:** This is currently an early pass at including protocols. I want to
+iterate on this in the future.
 
 ## Managing Shared Memory and File Descriptors
 

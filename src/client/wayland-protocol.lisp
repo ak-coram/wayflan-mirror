@@ -14,7 +14,7 @@
 
 (in-package #:xyz.shunter.wayflan.client)
 
-(xyz.shunter.wayflan.autowrap:wl-client-include
+(xyz.shunter.wayflan.client.scanner:wl-include
   '(#:wayflan/common #:protocols "wayland.xml")
   :exclude-defclasses (wl-display)
   :export t)

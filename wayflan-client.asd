@@ -18,12 +18,13 @@
                #:plump)
 
   :pathname #P"src/client/"
-  :serial t
   :components ((:file "packages")
-               (:file "client")
-               (:file "autowrap")
-               (:file "wayland-protocol")
-               (:file "stable-protocols"))
+               (:file "client" :depends-on ("packages"))
+               (:file "scanner" :depends-on ("client"))
+               (:file "asdf" :depends-on ("scanner"))
+               (:file "wayland-protocol" :depends-on ("scanner"))
+               (:file "stable-protocols"
+                      :depends-on ("scanner" "wayland-protocol")))
 
   :in-order-to ((test-op (test-op :wayflan-client/test))))
 

@@ -92,3 +92,7 @@
 The wayland-wire package defines utilities for communicating primitive data through a local address socket
 
 PRIVATE: This package is private to Wayflan, and its API is susceptible to change. Please do not use this package in your own code."))
+
+(defpackage #:xyz.shunter.wayflan.asdf
+  (:use #:cl #:asdf)
+  (:export #:wayflan-client-impl))

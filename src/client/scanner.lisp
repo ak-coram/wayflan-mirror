@@ -4,7 +4,7 @@
 ;;; This work is licensed under the BSD 3-Clause License.
 ;;; See LICENSE for more details.
 
-(in-package #:xyz.shunter.wayflan.autowrap)
+(in-package #:xyz.shunter.wayflan.client.scanner)
 
 
 
@@ -274,7 +274,7 @@
     ((or pathname string stream)
      input)))
 
-(defmacro wl-client-include (input &key export exclude-defclasses)
+(defmacro wl-include (input &key export exclude-defclasses)
   "Define the collection of interfaces, enums, requests, and events described by INPUT, for use by a Wayland client.
 
 INPUT - A stream to an XML file, a pathname to an XML file, or an XML string.
