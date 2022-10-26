@@ -85,9 +85,8 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 This package defines the client's interpretation of various CLOS classes, the event protocol, define- macros to implement wayland protocols, and the core Wayland protocol."))
 
 (defpackage #:xyz.shunter.wayflan.client.scanner
-  (:use #:cl #:alexandria)
-  (:local-nicknames (#:client #:xyz.shunter.wayflan.client)
-                    (#:dom #:org.shirakumo.plump.dom))
+  (:use #:cl #:alexandria #:xyz.shunter.wayflan)
+  (:local-nicknames (#:client #:xyz.shunter.wayflan.client))
   (:export #:wl-include)
   (:documentation "PRIVATE: Wayland XML protocol definitions auto-wrapper.
 

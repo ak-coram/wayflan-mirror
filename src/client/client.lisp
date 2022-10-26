@@ -441,12 +441,12 @@ OPTIONS:
                               (cons argument value))
                             entry-specifiers)))
        (defmethod wl-enum-value ((enum (eql ',name)) value)
-         ,(if bitfield
+         ,(if (first bitfield)
               `(%encode-bitfield-enum enum table value)
               `(%encode-standard-enum enum table value)))
 
        (defmethod wl-enum-keyword ((enum (eql ',name)) value)
-         ,(if bitfield
+         ,(if (first bitfield)
               `(%decode-bitfield-enum
                  table value
                  ,(when-let ((zero-entry (find 0 entry-specifiers
@@ -513,7 +513,7 @@ OPTIONS:
                       (if allow-null
                           `(if ,arg-name ,|@| 0)
                           @))))
-                 (((:uint :int) &optional enum)
+                 (((:uint :int) &key enum)
                   (if enum
                       `((wl-enum-value ',enum ,arg-name))
                       `(,arg-name)))
@@ -623,7 +623,7 @@ OPTIONS:
                          ,(when interface
                             `(check-type proxy ,interface))
                          proxy)))
-                   (((:int :uint) &optional enum)
+                   (((:int :uint) &key enum)
                     (@and
                       (if (%wltype= :int type)
                           `(wire:read-wl-int ,buffer)

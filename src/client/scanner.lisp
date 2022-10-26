@@ -8,282 +8,149 @@
 
 
 
-;; DOM-walking utils and macros
-
-(defmacro definline (name lambda-list &body body)
-  `(progn
-     (declaim (inline ,name))
-     (defun ,name ,lambda-list ,@body)))
-
-(defun child-of-tag (tag-name parent)
-  "Return the assumed sole child of PARENT."
-  (find-if (lambda (child)
-             (and (dom:element-p child)
-                  (string= tag-name (dom:tag-name child))))
-           (dom:children parent)))
-
-(defun children-of-tag (tag-name parent)
-  "Return an array of all child elements with the given tag."
-  (remove-if-not
-    (lambda (child)
-      (and (dom:element-p child)
-           (string= tag-name (dom:tag-name child))))
-    (dom:children parent)))
-
-(defun child-named (name tag-name parent)
-  "Find the sole child tagged TAG-NAME with the given name attribute."
-  (find-if (lambda (child)
-             (and (dom:element-p child)
-                  (string= tag-name (dom:tag-name child))
-                  (string= name (dom:attribute child "name"))))
-           (children-of-tag tag-name parent)))
-
-(defmacro define-attribute-reader (name &optional attribute-name)
-  "Define a reader function for the attribute value of a given element."
-  `(definline ,name (elm)
-     (dom:attribute elm ,(or attribute-name (string-downcase name)))))
-
-(defmacro define-child-reader (name &optional tag-name)
-  "Define a reader function for the sole child of the given tag name of a given parent."
-  `(definline ,name (parent)
-     (child-of-tag ,(or tag-name (string-downcase name)) parent)))
-
-(defmacro define-children-reader (name &optional tag-name)
-  "Define a reader function for all children of the given tag name of a given parent."
-  `(definline ,name (parent)
-     (children-of-tag ,(or tag-name (string-downcase name)) parent)))
-
-
-(define-child-reader protocol)
-
-(define-children-reader interfaces "interface")
-(define-children-reader requests "request")
-(define-children-reader events "event")
-(define-children-reader args "arg")
-(define-children-reader enums "enum")
-(define-children-reader entries "entry")
-
-(define-attribute-reader name)
-(define-attribute-reader summary)
-(define-attribute-reader bitfield)
-(define-attribute-reader version)
-
-(defun description (elm)
-  (string-trim
-    #(#\Newline #\Space #\Tab)
-    (dom:text (child-of-tag "description" elm))))
-
-(defun summary* (elm)
-  "Return the summary of an element whose summary is stored in a child description element."
-  (when-let ((description (child-of-tag "description" elm)))
-    (dom:attribute description "summary")))
-
-(defun parse-value (string)
-  (if (and (< 1 (length string))
-           (char= (char string 0) #\0))
-      (if (char= #\x (char string 1))
-          (parse-integer string :start 2 :radix 16)
-          (parse-integer string :start 1 :radix 8))
-      (parse-integer string :radix 10)))
-
-(defun value (entry)
-  (parse-value (dom:attribute entry "value")))
-
-
-
 (defvar *syms-to-export*)
 (defvar *exclude-defclasses*)
 
 ;; Transformation Functions
 
-(defun lispify (string)
-  "Transform a snake_cased string into a string fit to turn to a symbol."
+(defun %lispify (object)
   (map 'string
        (lambda (char)
-         (declare (type character char))
          (if (char= char #\_)
-             #\-
-             char))
-       (string-upcase string)))
+             #\- char))
+       (string-upcase
+         (if (stringp object)
+             object
+             (wl-name object)))))
 
-(defun hyphenize (&rest strings)
-  (format nil "~{~A~^-~}" (mapcar #'lispify strings)))
+(defun %hyphenize (&rest objects)
+  (format nil "~{~A~^-~}" (mapcar '%lispify objects)))
 
-(defun dot (base &rest rest)
-  (format nil "~A.~A" (lispify base) (apply #'hyphenize rest)))
+(defun %dot (&rest objects)
+  (format nil "~{~A~^.~}" (mapcar '%lispify objects)))
 
-(defun interface-name (dom-interface)
-  (intern (lispify (name dom-interface))))
+(defun %documentation (description)
+  (format nil "~@[~A~%~%~]~A"
+          (wl-summary description)
+          (wl-text description)))
 
-(defun interface-event-name (dom-interface)
-  (intern (hyphenize (name dom-interface)
-                     '#:event)))
-
-(defun request-name (interface-name dom-request)
-  (intern (dot interface-name (name dom-request))))
-
-(defun event-name (dom-event)
-  (make-keyword (lispify (name dom-event))))
-
-(defun enum-name (interface-name dom-enum)
-  (intern (dot interface-name (name dom-enum))))
-
-(defun enum-name* (interface-name enum-name)
-  (intern
-    (if (position #\. enum-name)
-        (lispify enum-name)
-        (dot interface-name enum-name))))
-
-(defun enum-entry-name (dom-entry)
-  (make-keyword (lispify (name dom-entry))))
-
-(defun arg-name (dom-arg)
-  (intern (lispify (name dom-arg))))
-
-(defun arg-type (interface-name dom-arg)
-  "Return the lispified type of the DOM arg element."
-  ;; TODO intern the interface/enum types into symbols
-  (eswitch ((dom:attribute dom-arg "type") :test 'string=)
-    ("int" (if-let ((enum (dom:attribute dom-arg "enum")))
-             (list :int (enum-name* interface-name enum))
-             :int))
-    ("uint" (if-let ((enum (dom:attribute dom-arg "enum")))
-              (list :uint (enum-name* interface-name enum))
-              :uint))
-    ("fixed" :fixed)
-    ("string"
-     `(:string
-        ,@(when-let ((allow-null (dom:attribute dom-arg "allow-null")))
-            `(:allow-null (string= allow-null "true")))))
-    ("object"
-     `(:object
-        ,@(when-let ((interface (dom:attribute dom-arg "interface")))
-            `(:interface ,(intern (lispify interface))))
-        ,@(when-let ((allow-null (dom:attribute dom-arg "allow-null")))
-            `(:allow-null (string= allow-null "true")))))
-    ("new_id"
-     `(:new-id
-        ,@(when-let ((interface (dom:attribute dom-arg "interface")))
-            `(:interface ,(intern (lispify interface))))))
-    ("array" :array)
-    ("fd" :fd)))
-
-(defun transform-arg (interface-name dom-arg)
-  (let ((name (arg-name dom-arg)))
+(defun %transform-arg (arg-interface arg)
+  (let ((name (intern (%lispify arg))))
+    (pushnew name *syms-to-export*)
     `(,name
-       :type ,(arg-type interface-name dom-arg)
-       ,@(when-let ((summary (summary* dom-arg)))
-           `(:documentation ,summary)))))
+       :type ,(destructuring-bind (name &key interface (allow-null nil anp) enum)
+                                  (wl-type arg)
+                `(,name
+                   ,@(when interface
+                       (let ((sym (intern (%lispify interface))))
+                         (pushnew sym *syms-to-export*)
+                         (list :interface sym)))
+                   ,@(when anp
+                       (list :allow-null allow-null))
+                   ,@(when enum
+                       (let ((sym (intern
+                                    (if (position #\. enum)
+                                        (%lispify enum)
+                                        (%dot arg-interface enum)))))
+                         (pushnew sym *syms-to-export*)
+                         (list :enum sym)))))
+       ,@(when-let ((summary (wl-summary arg)))
+           (list :documentation summary)))))
 
-(defun transform-request (dom-request interface opcode)
-  (let ((name (request-name interface dom-request)))
+(defun %transform-request (interface opcode request)
+  (let ((name (intern (%dot interface request)))
+        (interface-name (intern (%lispify interface))))
+    (pushnew name *syms-to-export*)
+    (pushnew interface-name *syms-to-export*)
+
+    `(wayflan-client:define-request (,name ,interface-name ,opcode)
+       ,(mapcar (curry '%transform-arg interface) (wl-args request))
+       (:since ,(wl-since request))
+       ,@(when-let ((type (wl-type request)))
+           `((:type ,type)))
+       ,@(when-let ((description (wl-description request)))
+           `((:documentation ,(%documentation description)))))))
+
+(defun %transform-event (interface opcode request)
+  (let ((name (make-keyword (%lispify request)))
+        (interface-name (intern (%lispify interface))))
+    (pushnew interface-name *syms-to-export*)
+
+    `(wayflan-client:define-event (,name ,interface-name ,opcode)
+       ,(mapcar (curry '%transform-arg interface) (wl-args request))
+       (:since ,(wl-since request))
+       ,@(when-let ((type (wl-type request)))
+           `((:type ,type)))
+       ,@(when-let ((description (wl-description request)))
+           `((:documentation ,(%documentation description)))))))
+
+(defun %transform-enum (interface enum)
+  (let ((name (intern (%dot interface enum))))
     (pushnew name *syms-to-export*)
 
-    `(client:define-request ,(list name interface opcode)
-       ,(map 'list (curry 'transform-arg interface)
-             (args dom-request))
-       ,@(when-let ((summary (summary* dom-request)))
-           `((:documentation ,summary)))
-       ,@(when-let ((type (dom:attribute dom-request "type")))
-           `((:type ,(make-keyword (lispify type)))))
-       ,@(when-let ((since (dom:attribute dom-request "since")))
-           `((:since ,(parse-integer since)))))))
+    `(wayflan-client:define-enum ,name ()
+       ,(mapcar (lambda (entry)
+                  `(,(make-keyword (%lispify entry))
+                     ,(wl-value entry)
+                     ,@(when-let ((summary (wl-summary entry)))
+                         (list :summary summary))))
+                (wl-entries enum))
+       (:bitfield ,(wl-bitfield enum))
+       ,@(when-let ((description (wl-description enum)))
+           `((:documentation (%documentation description)))))))
 
-(defun transform-event (dom-event interface opcode)
-  (let ((name (event-name dom-event)))
-    `(client:define-event ,(list name interface opcode)
-       ,(map 'list (curry 'transform-arg interface)
-             (args dom-event))
-       ,@(when-let ((summary (summary* dom-event)))
-           `((:documentation ,summary)))
-       ,@(when-let ((since (dom:attribute dom-event "since")))
-           `((:since ,(parse-integer since)))))))
-
-(defun transform-enum (dom-enum interface)
-  (let ((name (enum-name interface dom-enum)))
-    `(client:define-enum ,name ()
-       ,(map 'list
-             (lambda (dom-entry)
-               (let ((entry-name (enum-entry-name dom-entry)))
-                 (list entry-name
-                       (value dom-entry)
-                       :documentation (summary dom-entry))))
-             (entries dom-enum))
-       ,@(when-let ((summary (summary* dom-enum)))
-           `((:documentation ,summary)))
-       ,@(when (string= "true" (bitfield dom-enum))
-           `((:bitfield t))))))
-
-(defun transform-interface (dom-interface)
-  (let ((name (interface-name dom-interface))
-        (version (parse-integer (version dom-interface)))
-        (requests (requests dom-interface))
-        (events (events dom-interface))
-        (enums (enums dom-interface)))
+(defun %transform-interface (interface)
+  (let ((name (intern (%lispify interface))))
     (pushnew name *syms-to-export*)
 
-    `((client:define-interface ,name ()
-        ,@(when (member name *exclude-defclasses*
-                        :test #'string=)
+    `((wayflan-client:define-interface ,name ()
+        ,@(when (member name *exclude-defclasses* :test #'string=)
             `((:skip-defclass t)))
-        (:version ,version)
-
-        (:interface-name ,(name dom-interface))
-        ,@(when-let ((summary (summary* dom-interface)))
-            `((:documentation ,summary))))
-
-      ,@(map 'list
-             (lambda (dom-enum)
-               (transform-enum dom-enum name))
-             enums)
-
+        (:version ,(wl-version interface))
+        (:interface-name ,(wl-name interface))
+        ,@(when-let ((description (wl-description interface)))
+            `((:documentation ,(%documentation description)))))
+      ,@(mapcar (curry '%transform-enum interface) (wl-enums interface))
       ,@(let ((opcode -1))
-          (map 'list
-               (lambda (dom-request)
-                 (transform-request dom-request name (incf opcode)))
-               requests))
-
+          (mapcar (lambda (request)
+                    (%transform-request interface (incf opcode) request))
+                  (wl-requests interface)))
       ,@(let ((opcode -1))
-          (map 'list
-               (lambda (dom-event)
-                 (transform-event dom-event name (incf opcode)))
-               events)))))
+          (mapcar (lambda (event)
+                    (%transform-event interface (incf opcode) event))
+                  (wl-events interface))))))
 
-(defun transform-protocol (dom-protocol)
-  (let* ((interface-forms (mapcar #'transform-interface
-                                  (coerce (interfaces dom-protocol) 'list)))
+(defun %transform-protocol (protocol)
+  (let* ((define-forms (mapcar '%transform-interface
+                               (wl-interfaces protocol)))
          ;; Each transformed interface starts with a single DEFINE-INTERFACE
          ;; form, followed by all other DEFINE-X forms.
-         (define-interface-forms (mapcar #'first interface-forms))
-         (other-define-forms (mapcan #'rest interface-forms)))
+         (define-interface-forms (mapcar #'first define-forms))
+         (other-define-forms (mapcan #'rest define-forms)))
     ;; Transform all DOM interface definitions into define-X lisp forms, and
     ;; then rearrange them such that all DEFINE-INTERFACE forms are on top
     ;; (so that all other DEFINE-* forms has access to all classes).
 
     ;; If I don't do this, then the compiler will warn about type-checking for
     ;; types that aren't yet defined.
-    (append define-interface-forms
-            other-define-forms)))
+    (append define-interface-forms other-define-forms)))
 
-(defun pathname-or-input (input)
+(defun %pathname-or-input (input)
   (etypecase input
     (cons (asdf:component-pathname
             (or (asdf:find-component (first input) (rest input))
                 (error "System ~S path not found: ~S"
                        (first input) (rest input)))))
-    ((or pathname string stream)
-     input)))
+    ((or pathname string stream) input)))
 
 (defmacro wl-include (input &key export exclude-defclasses)
   "Define the collection of interfaces, enums, requests, and events described by INPUT, for use by a Wayland client.
 
 INPUT - A stream to an XML file, a pathname to an XML file, or an XML string.
 EXPORT - If true, export all interned symbols in the current package."
-  (let ((plump:*tag-dispatchers* plump:*xml-tags*)
-        *syms-to-export*
-        (*exclude-defclasses* exclude-defclasses))
+  (let ((*exclude-defclasses* exclude-defclasses)
+        *syms-to-export*)
     `(progn
-       ,@(transform-protocol
-           (protocol (plump:parse (pathname-or-input (eval input)))))
-       ,@(when export
-           `((export ',*syms-to-export*))))))
+       ,@(%transform-protocol (parse (%pathname-or-input (eval input))))
+       ,(when export
+          `(export ',*syms-to-export*)))))

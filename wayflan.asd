@@ -24,9 +24,10 @@
   :defsystem-depends-on (#:cffi-grovel)
   :depends-on (#:alexandria
                #:babel
-               #:cffi)
+               #:cffi
+               #:plump)
   :pathname #P"src/"
-  :serial t
+  :serial nil
   :components ((:module #:protocols
                         :pathname "protocols"
                         :components ((:static-file "wayland.xml")
@@ -34,9 +35,10 @@
                                      (:static-file "viewporter.xml")
                                      (:static-file "xdg-shell.xml")))
                (:file "packages")
-               (:cffi-grovel-file "grovel")
-               (:file "ffi")
-               (:file "wire")))
+               (:cffi-grovel-file "grovel" :depends-on ("packages"))
+               (:file "ffi" :depends-on ("grovel"))
+               (:file "wire" :depends-on ("ffi"))
+               (:file "protocol" :depends-on ("packages"))))
 
 (defsystem #:wayflan/test
   :version (:read-file-form "version.lisp")

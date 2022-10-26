@@ -56,12 +56,10 @@
 (defmethod perform ((o wayflan-scan-op) (c wayflan-client-impl))
   (with-open-file (out (first (output-files o c))
                        :direction :output :if-exists :supersede)
-    (let (;; Absolutely make sure this lisp file can be read back
-          (*print-readably* t)
-          (*print-escape* t)
-          (*package* (find-package "KEYWORD")))
-      (dolist (form (wayflan-doc-to-forms c))
-        (print form out)))))
+    (with-standard-io-syntax
+      (let ((*package* (find-package "KEYWORD")))
+        (dolist (form (wayflan-doc-to-forms c))
+          (print form out))))))
 
 (setf (find-class 'asdf::wayflan-client-impl)
       (find-class 'wayflan-client-impl))

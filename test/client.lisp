@@ -67,9 +67,9 @@
   (:documentation "Create a runtime-typeknown object"))
 
 (client:define-request (wf-testable.send-enums wf-testable 6)
-  ((x1 :type (:uint wf-testable.standard-enum))
-   (x2 :type (:uint wf-testable.bitfield-enum))
-   (x3 :type (:uint wf-testable.funny-bitfield-enum)))
+  ((x1 :type (:uint :enum wf-testable.standard-enum))
+   (x2 :type (:uint :enum wf-testable.bitfield-enum))
+   (x3 :type (:uint :enum wf-testable.funny-bitfield-enum)))
   (:documentation "Send various enums"))
 
 (client:define-event (:empty wf-testable 0)
@@ -77,9 +77,9 @@
   (:documentation "Signifies a no-value event"))
 
 (client:define-event (:receive-enums wf-testable 1)
-  ((x1 :type (:uint wf-testable.standard-enum))
-   (x2 :type (:uint wf-testable.bitfield-enum))
-   (x3 :type (:uint wf-testable.funny-bitfield-enum))))
+  ((x1 :type (:uint :enum wf-testable.standard-enum))
+   (x2 :type (:uint :enum wf-testable.bitfield-enum))
+   (x3 :type (:uint :enum wf-testable.funny-bitfield-enum))))
 
 
 (define-test client-api

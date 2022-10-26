@@ -93,6 +93,43 @@ The wayland-wire package defines utilities for communicating primitive data thro
 
 PRIVATE: This package is private to Wayflan, and its API is susceptible to change. Please do not use this package in your own code."))
 
+(defpackage #:xyz.shunter.wayflan
+  (:nicknames #:wayflan)
+  (:use #:cl #:alexandria)
+  (:export #:wl-protocol
+           #:wl-interface
+           #:wl-request
+           #:wl-event
+           #:wl-enum
+           #:wl-entry
+           #:wl-arg
+           #:wl-description
+
+           #:wl-name
+           #:wl-copyright
+           #:wl-interfaces
+           #:wl-version
+           #:wl-requests
+           #:wl-events
+           #:wl-enums
+           #:wl-type
+           #:wl-args
+           #:wl-since
+           #:wl-bitfield
+           #:wl-entries
+           #:wl-value
+           #:wl-summary
+           #:wl-text
+
+           #:parse)
+  (:documentation "Wayland protocol information
+
+Wayland is a protocol for a compositor to talk to its clients.
+The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
+The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
+
+This package defines Wayland protocol CLOS objects, and a function that parses a protocol document into CLOS."))
+
 (defpackage #:xyz.shunter.wayflan.asdf
   (:use #:cl #:asdf)
   (:export #:wayflan-client-impl))

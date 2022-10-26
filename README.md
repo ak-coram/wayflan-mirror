@@ -21,9 +21,11 @@ transition projects to any breaking changes I make along the way.*
 
 ## Features
 
-- Closures can be used as callbacks
+- All implementation done in Common Lisp from the socket up
 - Enum values are translated into keywords
-- `wl-include` generates code to implement protocol XML files
+- Wayland protocol introspection
+- ASDF component `(:wayflan-client-impl "protocol-file" :in-package "the-pkg")`
+  Generates bindings from `protocol-file.xml` into the specified package
 
 ## Documentation
 

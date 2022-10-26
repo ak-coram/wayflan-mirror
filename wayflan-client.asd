@@ -14,8 +14,7 @@
   :defsystem-depends-on (#:cffi-grovel)
   :depends-on (#:wayflan/common
                #:alexandria
-               #:closer-mop
-               #:plump)
+               #:closer-mop)
 
   :pathname #P"src/client/"
   :components ((:file "packages")
