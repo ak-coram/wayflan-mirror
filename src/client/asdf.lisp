@@ -4,7 +4,7 @@
 ;;; This work is licensed under the BSD 3-Clause License.
 ;;; See LICENSE for more details.
 
-(in-package #:xyz.shunter.wayflan.asdf)
+(in-package #:xyz.shunter.wayflan)
 
 
 

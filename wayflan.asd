@@ -28,17 +28,18 @@
                #:plump)
   :pathname #P"src/"
   :serial nil
-  :components ((:module #:protocols
+  :components ((:file "packages")
+               (:file "protocol" :depends-on ("packages"))
+               (:file "types" :depends-on ("packages"))
+               (:cffi-grovel-file "grovel" :depends-on ("packages"))
+               (:file "ffi" :depends-on ("grovel"))
+               (:file "wire" :depends-on ("ffi" "types"))
+               (:module #:protocols
                         :pathname "protocols"
                         :components ((:static-file "wayland.xml")
                                      (:static-file "presentation-time.xml")
                                      (:static-file "viewporter.xml")
-                                     (:static-file "xdg-shell.xml")))
-               (:file "packages")
-               (:cffi-grovel-file "grovel" :depends-on ("packages"))
-               (:file "ffi" :depends-on ("grovel"))
-               (:file "wire" :depends-on ("ffi"))
-               (:file "protocol" :depends-on ("packages"))))
+                                     (:static-file "xdg-shell.xml")))))
 
 (defsystem #:wayflan/test
   :version (:read-file-form "version.lisp")

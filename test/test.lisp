@@ -5,7 +5,7 @@
 ;;; See LICENSE for more details.
 
 (defpackage #:xyz.shunter.wayflan.test
-  (:use #:cl #:org.shirakumo.parachute)
+  (:use #:cl #:org.shirakumo.parachute #:wayflan)
   (:local-nicknames (#:wire #:xyz.shunter.wayflan.wire)
                     (#:client #:xyz.shunter.wayflan.client)
                     (#:ffi #:xyz.shunter.wayflan.ffi)))
@@ -52,7 +52,7 @@
          (length (ldb (byte 16 16) length-and-opcode))
          (opcode (ldb (byte 16 0) length-and-opcode))
          (body-length (- (/ length wire::+wl-word-size+) 2))
-         (array (make-array body-length :element-type 'wire:wl-uint)))
+         (array (make-array body-length :element-type 'wl-uint)))
     (dotimes (i (- (floor size wire::+wl-word-size+) 2))
       (setf (aref array i)
             (cffi:mem-aref carray :uint32 (+ i 2))))
@@ -75,19 +75,19 @@
 (defun contents-words (contents)
   (loop :for content :in contents
         :sum (etypecase content
-               ((or wire:wl-uint wire:wl-int) 1)
+               ((or wl-uint wl-int) 1)
                (vector (ceiling (length content) 4)))))
 
 (defun contents-to-words (contents)
   (loop :with array := (make-array (contents-words contents)
-                                   :element-type 'wire:wl-uint)
+                                   :element-type 'wl-uint)
         :with i := 0
         :for content :in contents
         :do (etypecase content
-              (wire:wl-uint
+              (wl-uint
                 (setf (aref array i) content)
                 (incf i))
-              (wire:wl-int
+              (wl-int
                 (setf (aref array i)
                       (cffi:with-foreign-object (cint :uint32)
                         (setf (cffi:mem-ref cint :int32) content)
@@ -125,5 +125,5 @@
 
 (defun make-wl-array (octets)
   (make-array (length octets)
-              :element-type 'wire::octet
+              :element-type 'xyz.shunter.wayflan::octet
               :initial-contents octets))

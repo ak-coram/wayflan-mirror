@@ -8,7 +8,7 @@
 ;;; See LICENSE for more details.
 
 (defpackage #:xyz.shunter.wayflan.examples.wl-touch-demo
-  (:use #:cl #:wayflan-client #:wayflan-client.xdg-shell)
+  (:use #:cl #:wayflan #:wayflan-client #:wayflan-client.xdg-shell)
   (:local-nicknames (#:a #:alexandria)
                     (#:shm #:posix-shm))
   (:export #:run))
@@ -33,8 +33,8 @@
    (wl-touch :initform nil)
 
    ;; State
-   width
-   height
+   (width :type wl-int)
+   (height :type wl-int)
    (points :initform (make-hash-table))))
 
 (defstruct point

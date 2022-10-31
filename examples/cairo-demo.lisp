@@ -9,7 +9,7 @@
 ;;; Unaltered image accessed at <https://www.lisperati.com/logo.html>
 
 (defpackage #:xyz.shunter.wayflan.examples.cairo-demo
-  (:use #:cl #:wayflan-client #:wayflan-client.xdg-shell)
+  (:use #:cl #:wayflan #:wayflan-client #:wayflan-client.xdg-shell)
   (:local-nicknames (#:a #:alexandria)
                     (#:c #:cl-cairo2)
                     (#:shm #:posix-shm))

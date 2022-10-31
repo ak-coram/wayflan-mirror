@@ -36,7 +36,7 @@
    (wl-interface-name (find-class interface))))
 
 (defclass wl-interface-class (standard-class)
-  ((%version :type wire:wl-uint
+  ((%version :type wl-uint
              :initarg :version
              :reader wl-interface-version)
    (%interface-name :type string
@@ -58,14 +58,14 @@
 ;; Wayland Proxy
 
 (defclass wl-proxy ()
-  ((%object-id :type wire:wl-uint
+  ((%object-id :type wl-uint
                :reader wl-proxy-id
                :accessor %wl-proxy-id)
    (%display :type wl-display
              :initarg :display
              :reader wl-proxy-display
              :accessor %wl-proxy-display)
-   (%version :type wire:wl-uint
+   (%version :type wl-uint
              :initarg :version
              :reader wl-proxy-version)
    (%deletedp :type boolean
@@ -104,7 +104,7 @@
             :type (or wl-proxy null)
             :documentation "object where the error occurred")
    (%code :initarg :code :reader wl-error-code
-          :type wire:wl-uint
+          :type wl-uint
           :documentation "error code")
    (%message :initarg :message :reader wl-error-message
              :type string

@@ -8,23 +8,7 @@
   (:nicknames #:wayflan-client)
   (:use #:cl #:alexandria)
   (:local-nicknames (#:wire #:xyz.shunter.wayflan.wire))
-  (:import-from #:xyz.shunter.wayflan.wire
-                #:wl-uint
-                #:wl-int
-                #:wl-fixed
-                #:wl-array
-
-                #:+most-positive-wl-uint+
-                #:+most-positive-wl-int+
-                #:+most-negative-wl-int+
-                #:+most-positive-wl-fixed+
-                #:+most-negative-wl-fixed+)
-  (:export #:wl-uint
-           #:wl-int
-           #:wl-fixed
-           #:wl-array
-
-           #:wl-interface-class
+  (:export #:wl-interface-class
            #:wl-interface-version
            #:wl-interface-name
            #:find-interface-named
@@ -50,7 +34,6 @@
            #:wl-error-code
            #:wl-error-message
 
-           #:display-pathname
            #:wl-display-connect
            #:wl-display-disconnect
            #:wl-display-listen
@@ -61,12 +44,6 @@
            #:define-enum
            #:define-request
            #:define-event
-
-           #:+most-positive-wl-uint+
-           #:+most-positive-wl-int+
-           #:+most-positive-wl-fixed+
-           #:+most-negative-wl-int+
-           #:+most-negative-wl-fixed+
 
            #:with-open-display
            #:with-proxy

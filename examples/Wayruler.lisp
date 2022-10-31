@@ -46,13 +46,13 @@
    xdg-toplevel
 
    ;; State
-   (physical-width :type fixnum)
-   (physical-height :type fixnum)
-   (output-width :type fixnum)
-   (output-height :type fixnum)
-   (output-scale :type fixnum :initform 1)
-   (width :type fixnum)
-   (height :type fixnum)))
+   (physical-width :type wl-int)
+   (physical-height :type wl-int)
+   (output-width :type wl-int)
+   (output-height :type wl-int)
+   (output-scale :type wl-int :initform 1)
+   (width :type wl-int)
+   (height :type wl-int)))
 
 (defun ruler-size-mm (app)
   (with-slots (physical-width output-width output-scale width) app

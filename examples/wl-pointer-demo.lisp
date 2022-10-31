@@ -12,7 +12,7 @@
 ;;; See LICENSE for more details.
 
 (defpackage #:xyz.shunter.wayflan.examples.wl-pointer-demo
-  (:use #:cl #:wayflan-client #:wayflan-client.xdg-shell)
+  (:use #:cl #:wayflan #:wayflan-client #:wayflan-client.xdg-shell)
   (:local-nicknames (#:a #:alexandria)
                     (#:shm #:posix-shm))
   (:export #:run))
@@ -41,8 +41,8 @@
    cursor-surface
 
    ;; State
-   width
-   height
+   (width :type wl-int)
+   (height :type wl-int)
    (ptr-x :initform nil)
    (ptr-y :initform nil)
    (btn-left? :initform nil)

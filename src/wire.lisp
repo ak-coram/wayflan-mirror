@@ -18,23 +18,8 @@
 ;; the other value.
 (defconstant +header-length+ (* 2 +wl-word-size+))
 
-(deftype octet ()
-  '(unsigned-byte 8))
-
 (deftype c-sized-int ()
   '(signed-byte #.(* 8 (cffi:foreign-type-size :int))))
-
-(deftype wl-int ()
-  '(signed-byte 32))
-
-(deftype wl-uint ()
-  '(unsigned-byte 32))
-
-(deftype wl-fixed ()
-  '(real #x-800000 #x7fffffff/100))
-
-(deftype wl-array (&optional (size '*))
-  `(simple-array octet (,size)))
 
 ;; Some older versions of libwayland reserved a small 128-byte buffer to
 ;; receive cmsg data. This can hold at most 28 fds, and as there's no way to
@@ -54,12 +39,6 @@
 ;; The circular buffer size must be able to fit the necessary fd's
 (assert (>= +buf-size+
             (* +max-fds-out+ (cffi:foreign-type-size :int))))
-
-(defconstant +most-positive-wl-uint+ (1- (ash 1 32)))
-(defconstant +most-positive-wl-int+ (1- (ash 1 31)))
-(defconstant +most-positive-wl-fixed+ #x7fffffff/100)
-(defconstant +most-negative-wl-int+ (- (ash 1 31)))
-(defconstant +most-negative-wl-fixed+ #x-800000)
 
 (declaim (inline padded-size))
 (defun padded-size (size)
@@ -540,7 +519,7 @@ in the circular buffer and return the number of iovecs used."
 (defmacro %wl-primitive-size (type object)
   (ecase type
     (:fd 0)
-    ((:int :uint :fixed) 4)
+    ((:int :uint :fixed) +wl-word-size+)
     (:array (with-gensyms (size)
               `(let ((,size (length ,object)))
                  (+ +wl-word-size+ (padded-size ,size)))))
@@ -571,14 +550,12 @@ in the circular buffer and return the number of iovecs used."
 
 ;; Write a signed 24.8 decimal number to a foreign array
 (defun %write-wl-fixed (n cptr offset)
-  (declare (type (real #x-800000 #x7fffffff/100) n))
   (multiple-value-bind (integer-part decimal-part) (floor n)
     (setf (cffi:mem-ref cptr :uint32 offset)
           (dpb integer-part (byte 24 8) (floor decimal-part #x1/100)))))
 
 ;; Write an octet vector to a foreign array
 (defun %write-wl-array (octet-vector cptr offset)
-  (declare (type (vector octet) octet-vector))
   (let ((length (length octet-vector)))
     (cffi:with-pointer-to-vector-data (carray octet-vector)
       (setf (cffi:mem-ref cptr :uint32 offset) length)
@@ -586,7 +563,6 @@ in the circular buffer and return the number of iovecs used."
 
 ;; Write a null-terminated UTF-8 encoded string
 (defun %write-wl-string (string cptr offset)
-  (declare (type string string))
   (cffi:with-foreign-string ((cstr size) string :encoding :utf-8)
     (setf (cffi:mem-ref cptr :uint32 offset) size)
     (ffi:memcpy (cffi:inc-pointer cptr (+ offset 4)) cstr size)))
@@ -680,7 +656,7 @@ in the circular buffer and return the number of iovecs used."
       (cffi:foreign-array-to-lisp
         (cffi:inc-pointer (buf-ptr buffer) (buf-offset buffer))
         `(:array :uint8 ,length)
-        :element-type 'octet)
+        :element-type 'xyz.shunter.wayflan::octet)
       (incf-buf buffer body-size))))
 
 (defmacro with-incoming-message ((socket sender-id opcode buf) &body body)
