@@ -8,7 +8,7 @@
 ;;; See LICENSE for more details.
 
 (defpackage #:xyz.shunter.wayflan.examples.wl-touch-demo
-  (:use #:cl #:wayflan #:wayflan-client #:wayflan-client.xdg-shell)
+  (:use #:cl #:wayflan-client #:wayflan-client.xdg-shell)
   (:local-nicknames (#:a #:alexandria)
                     (#:shm #:posix-shm))
   (:export #:run))

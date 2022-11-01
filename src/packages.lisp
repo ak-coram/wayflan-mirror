@@ -52,7 +52,7 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 
 This package defines Wayland protocol CLOS objects, a function that parses a protocol document into CLOS, and a series of types of Wayland primitives."))
 
- (defpackage #:xyz.shunter.wayflan.ffi
+(defpackage #:xyz.shunter.wayflan.ffi
   (:use #:cffi)
   (:import-from #:cl
                 #:defpackage
@@ -92,8 +92,8 @@ This package defines Wayland protocol CLOS objects, a function that parses a pro
            #:socket
            #:bind
            #:accept
-           #:connect
-           #:close
+           #:connect-fd
+           #:close-fd
            #:sendmsg
            #:recvmsg
 
@@ -107,8 +107,8 @@ This package defines Wayland protocol CLOS objects, a function that parses a pro
   (:documentation "PRIVATE: This package is private to Wayflan, and its API is susceptible to change. Please do not use this package in your own code."))
 
 (defpackage #:xyz.shunter.wayflan.wire
-  (:use #:cl #:alexandria #:xyz.shunter.wayflan)
-  (:local-nicknames (#:ffi #:xyz.shunter.wayflan.ffi))
+  (:use #:cl #:alexandria #:xyz.shunter.wayflan
+        #:xyz.shunter.wayflan.ffi)
   (:export #:data-socket
            #:make-socket
            #:connect

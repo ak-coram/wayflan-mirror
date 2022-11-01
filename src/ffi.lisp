@@ -52,12 +52,12 @@
   (addr :pointer)
   (addrlen (:pointer socklen)))
 
-(defcfun "connect" :int
+(defcfun ("connect" connect-fd) :int
   (sockfd :int)
   (addr :pointer)
   (addrlen socklen))
 
-(defcfun "close" :int
+(defcfun ("close" close-fd) :int
   (fd :int))
 
 (defcfun "sendmsg" signed-size

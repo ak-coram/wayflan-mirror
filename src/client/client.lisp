@@ -92,7 +92,7 @@
    (%proxy-table :type hash-table
                  :initform (make-hash-table)
                  :reader %proxy-table)
-   (%socket :type wire:data-socket
+   (%socket :type data-socket
             :initarg :socket :reader %wl-display-socket))
   (:documentation "A connection to the compositor that acts as a proxy to the wl_display singleton object")
   (:version . 1)
@@ -250,15 +250,15 @@ Whether or not WL-DISPLAY-CONNECT opened a stream, it will close the display's
 underlying stream when WL-DISPLAY-DISCONNECT is called."
   (flet ((connect-socket (pathname)
            "Connect to the Unix socket living in PATHNAME."
-           (let ((sock (wire:make-socket)))
-             (wire:connect sock (uiop:unix-namestring pathname))
+           (let ((sock (make-socket)))
+             (connect sock (uiop:unix-namestring pathname))
              sock)))
     (make-instance
       'wl-display
-      :socket (if (typep display-name 'wire::%socket)
+      :socket (if (typep display-name 'xyz.shunter.wayflan.wire::%socket)
                 display-name
                 (connect-socket (display-pathname display-name)))
-      :pathname (unless (typep display-name 'wire::%socket)
+      :pathname (unless (typep display-name 'xyz.shunter.wayflan.wire::%socket)
                   (display-pathname display-name))
       :version 1)))
 
@@ -266,7 +266,7 @@ underlying stream when WL-DISPLAY-DISCONNECT is called."
   (:documentation "Close the display's underlying stream and remove all proxies.")
   (:method ((display wl-display))
    (prog1
-     (wire:close-socket (%wl-display-socket display))
+     (close-socket (%wl-display-socket display))
      (%clear-proxies display)))
   (:method ((display wl-destroyed-proxy))
    ;; Assume the proxy was a deleted display -- do nothing.
@@ -274,7 +274,7 @@ underlying stream when WL-DISPLAY-DISCONNECT is called."
 
 (defun wl-display-listen (display)
   "Return whether there is a (partial) message available from the display."
-  (wire:listen-socket (%wl-display-socket display)))
+  (listen-socket (%wl-display-socket display)))
 
 (defun wl-display-dispatch-event (display)
   "Read and dispatch the display's next event, or event if more than one is buffered.
@@ -284,7 +284,7 @@ Return the number of events processed."
             (not (wl-display-listen display)))
        events)
       (declare (type fixnum events))
-      (wire:with-incoming-message ((%wl-display-socket display) sender-id opcode buffer)
+      (with-incoming-message ((%wl-display-socket display) sender-id opcode buffer)
         (setf sender (find-proxy display sender-id))
         (%dispatch-event
           sender (%read-event sender opcode buffer)))))
@@ -537,7 +537,7 @@ OPTIONS:
              (defun-body
                (@and
                  ;; The core of the request is the send-wl-message macro..
-                 `(wire:send-wl-message
+                 `(send-wl-message
                     ((%wl-display-socket (wl-proxy-display ,interface))
                      (wl-proxy-id ,interface) ,opcode)
                     ,(apply #'append (mapcar #'arg-to-types arg-specifiers))
@@ -605,12 +605,12 @@ OPTIONS:
                    ((:new-id &key interface)
                     (if interface
                         `(%make-proxy ',interface ,proxy
-                                      :object-id (wire:read-wl-uint ,buffer))
+                                      :object-id (read-wl-uint ,buffer))
                         `(%make-proxy
-                           (find-interface-named (wire:read-wl-string ,buffer))
+                           (find-interface-named (read-wl-string ,buffer))
                            ,proxy
-                           :version (wire:read-wl-uint ,buffer)
-                           :object-id (wire:read-wl-uint ,buffer))))
+                           :version (read-wl-uint ,buffer)
+                           :object-id (read-wl-uint ,buffer))))
                    ((:object &key interface allow-null)
                     (@and
                       `(find-proxy (wl-proxy-display ,proxy)
@@ -618,7 +618,7 @@ OPTIONS:
                       (if allow-null
                           `(when id ,|@|)
                           @)
-                      `(let* ((id (wire:read-wl-uint ,buffer))
+                      `(let* ((id (read-wl-uint ,buffer))
                               (proxy ,|@|))
                          ,(when interface
                             `(check-type proxy ,interface))
@@ -626,16 +626,16 @@ OPTIONS:
                    (((:int :uint) &key enum)
                     (@and
                       (if (%wltype= :int type)
-                          `(wire:read-wl-int ,buffer)
-                          `(wire:read-wl-uint ,buffer))
+                          `(read-wl-int ,buffer)
+                          `(read-wl-uint ,buffer))
                       (if enum
                           `(wl-enum-keyword ',enum ,|@|)
                           @)))
-                   (:fixed `(wire:read-wl-fixed ,buffer))
-                   (:array `(wire:read-wl-array ,buffer))
-                   (:string `(wire:read-wl-string ,buffer))
-                   (:fd `(wire:read-fd (%wl-display-socket
-                                         (wl-proxy-display ,proxy))))))))
+                   (:fixed `(read-wl-fixed ,buffer))
+                   (:array `(read-wl-array ,buffer))
+                   (:string `(read-wl-string ,buffer))
+                   (:fd `(read-fd (%wl-display-socket
+                                    (wl-proxy-display ,proxy))))))))
         `(progn
            (defmethod %read-event ((,proxy ,interface)
                                    (,opcode-sym (eql ,opcode))

@@ -35,8 +35,7 @@
           (wl-text description)))
 
 (defun %transform-arg (arg-interface arg)
-  (let ((name (intern (%lispify arg))))
-    (pushnew name *syms-to-export*)
+  (let ((name (make-symbol (%lispify arg))))
     `(,name
        :type ,(destructuring-bind (name &key interface (allow-null nil anp) enum)
                                   (wl-type arg)
@@ -63,7 +62,7 @@
     (pushnew name *syms-to-export*)
     (pushnew interface-name *syms-to-export*)
 
-    `(wayflan-client:define-request (,name ,interface-name ,opcode)
+    `(define-request (,name ,interface-name ,opcode)
        ,(mapcar (curry '%transform-arg interface) (wl-args request))
        (:since ,(wl-since request))
        ,@(when-let ((type (wl-type request)))
@@ -76,7 +75,7 @@
         (interface-name (intern (%lispify interface))))
     (pushnew interface-name *syms-to-export*)
 
-    `(wayflan-client:define-event (,name ,interface-name ,opcode)
+    `(define-event (,name ,interface-name ,opcode)
        ,(mapcar (curry '%transform-arg interface) (wl-args request))
        (:since ,(wl-since request))
        ,@(when-let ((type (wl-type request)))
@@ -88,7 +87,7 @@
   (let ((name (intern (%dot interface enum))))
     (pushnew name *syms-to-export*)
 
-    `(wayflan-client:define-enum ,name ()
+    `(define-enum ,name ()
        ,(mapcar (lambda (entry)
                   `(,(make-keyword (%lispify entry))
                      ,(wl-value entry)
@@ -103,7 +102,7 @@
   (let ((name (intern (%lispify interface))))
     (pushnew name *syms-to-export*)
 
-    `((wayflan-client:define-interface ,name ()
+    `((define-interface ,name ()
         ,@(when (member name *exclude-defclasses* :test #'string=)
             `((:skip-defclass t)))
         (:version ,(wl-version interface))

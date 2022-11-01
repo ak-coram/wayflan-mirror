@@ -49,7 +49,7 @@
 ;; Circular Buffers
 
 ;; These circular buffers store a pointer to a foreign array (to be either
-;; shipped out via ffi:sendmsg or filled in via ffi:recvmsg), always of size
+;; shipped out via sendmsg or filled in via recvmsg), always of size
 ;; +buf-size+, and has heads and tails stored as offsets to the pointer.
 
 (defstruct (circular-buffer (:conc-name #:cb-)
@@ -117,28 +117,28 @@
     (return-from cb-push-foreign-octets))
   (assert (>= (cb-free-space cb) n))
   (if (<= (+ (cb-start* cb) n) +buf-size+)
-      (ffi:memcpy (cffi:inc-pointer (cb-ptr cb) (cb-end* cb))
-                  carray n)
+      (memcpy (cffi:inc-pointer (cb-ptr cb) (cb-end* cb))
+              carray n)
       (let ((first-seg (- +buf-size+ (cb-start* cb))))
-        (ffi:memcpy (cffi:inc-pointer (cb-ptr cb) (cb-end* cb))
-                    carray
-                    first-seg)
-        (ffi:memcpy (cb-ptr cb)
-                    (cffi:inc-pointer carray first-seg)
-                    (- n first-seg))))
+        (memcpy (cffi:inc-pointer (cb-ptr cb) (cb-end* cb))
+                carray
+                first-seg)
+        (memcpy (cb-ptr cb)
+                (cffi:inc-pointer carray first-seg)
+                (- n first-seg))))
   (cb-shiftin cb n))
 
 (defun cb-pull-foreign-octets (cb carray offset size)
   (declare (type circular-buffer cb)
            (type fixnum offset size))
   (if (<= (+ (cb-start* cb) size) +buf-size+)
-      (ffi:memcpy carray (cffi:inc-pointer (cb-ptr cb) (cb-start* cb)) size)
+      (memcpy carray (cffi:inc-pointer (cb-ptr cb) (cb-start* cb)) size)
       (let ((first-seg (- +buf-size+ (cb-start* cb))))
-        (ffi:memcpy (cffi:inc-pointer carray offset)
-                    (cffi:inc-pointer (cb-ptr cb) (cb-start* cb))
-                    first-seg)
-        (ffi:memcpy (cffi:inc-pointer carray (+ offset first-seg))
-                    (cb-ptr cb) (- size first-seg))))
+        (memcpy (cffi:inc-pointer carray offset)
+                (cffi:inc-pointer (cb-ptr cb) (cb-start* cb))
+                first-seg)
+        (memcpy (cffi:inc-pointer carray (+ offset first-seg))
+                (cb-ptr cb) (- size first-seg))))
   (cb-shiftout cb size))
 
 (defun cb-push-number (cb number ctype)
@@ -160,13 +160,13 @@
         (length (cb-length cb)))
     (if (<= (+ start* length)
             +buf-size+)
-        (ffi:memcpy dest-ptr (cffi:inc-pointer (cb-ptr cb) start*)
-                    length)
+        (memcpy dest-ptr (cffi:inc-pointer (cb-ptr cb) start*)
+                length)
         (let ((first-seg (- +buf-size+ start*)))
-          (ffi:memcpy dest-ptr (cffi:inc-pointer (cb-ptr cb) start*)
-                      first-seg)
-          (ffi:memcpy (cffi:inc-pointer dest-ptr first-seg)
-                      (cb-ptr cb) (- length first-seg)))))
+          (memcpy dest-ptr (cffi:inc-pointer (cb-ptr cb) start*)
+                  first-seg)
+          (memcpy (cffi:inc-pointer dest-ptr first-seg)
+                  (cb-ptr cb) (- length first-seg)))))
   (values))
 
 (defun cb-prepare-gather-iovec (cb iov)
@@ -181,20 +181,20 @@ in the circular buffer and return the number of iovecs used."
        0)
       ((and (>= start* end*)
             (plusp start))
-       (cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
-                                 iov (:struct ffi:iovec))
-         (setf ffi:iov-base (cffi:inc-pointer (cb-ptr cb) start*)
-               ffi:iov-len (- +buf-size+ start*)))
-       (cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
-                                 (cffi:mem-aptr iov '(:struct ffi:iovec) 1)
-                                 (:struct ffi:iovec))
-         (setf ffi:iov-base (cb-ptr cb)
-               ffi:iov-len end*))
+       (cffi:with-foreign-slots ((iov-base iov-len)
+                                 iov (:struct iovec))
+         (setf iov-base (cffi:inc-pointer (cb-ptr cb) start*)
+               iov-len (- +buf-size+ start*)))
+       (cffi:with-foreign-slots ((iov-base iov-len)
+                                 (cffi:mem-aptr iov '(:struct iovec) 1)
+                                 (:struct iovec))
+         (setf iov-base (cb-ptr cb)
+               iov-len end*))
        2)
-      ((cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
-                                 iov (:struct ffi:iovec))
-         (setf ffi:iov-base (cffi:inc-pointer (cb-ptr cb) start*)
-               ffi:iov-len (- (if (plusp end*) end* +buf-size+) start*)))
+      ((cffi:with-foreign-slots ((iov-base iov-len)
+                                 iov (:struct iovec))
+         (setf iov-base (cffi:inc-pointer (cb-ptr cb) start*)
+               iov-len (- (if (plusp end*) end* +buf-size+) start*)))
        1))))
 
 (defun cb-prepare-scatter-iovec (cb iov)
@@ -210,20 +210,20 @@ in the circular buffer and return the number of iovecs used."
        0)
       ((or (> start* end*)
            (zerop start))
-       (cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
-                                 iov (:struct ffi:iovec))
-         (setf ffi:iov-base (cffi:inc-pointer (cb-ptr cb) end*)
-               ffi:iov-len (- (if (plusp start*) start* +buf-size+) end*)))
+       (cffi:with-foreign-slots ((iov-base iov-len)
+                                 iov (:struct iovec))
+         (setf iov-base (cffi:inc-pointer (cb-ptr cb) end*)
+               iov-len (- (if (plusp start*) start* +buf-size+) end*)))
        1)
-      ((cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
-                                 iov (:struct ffi:iovec))
-         (setf ffi:iov-base (cffi:inc-pointer (cb-ptr cb) end*)
-               ffi:iov-len (- +buf-size+ end*)))
-       (cffi:with-foreign-slots ((ffi:iov-base ffi:iov-len)
-                                 (cffi:mem-aptr iov '(:struct ffi:iovec) 1)
-                                 (:struct ffi:iovec))
-         (setf ffi:iov-base (cb-ptr cb)
-               ffi:iov-len start*))
+      ((cffi:with-foreign-slots ((iov-base iov-len)
+                                 iov (:struct iovec))
+         (setf iov-base (cffi:inc-pointer (cb-ptr cb) end*)
+               iov-len (- +buf-size+ end*)))
+       (cffi:with-foreign-slots ((iov-base iov-len)
+                                 (cffi:mem-aptr iov '(:struct iovec) 1)
+                                 (:struct iovec))
+         (setf iov-base (cb-ptr cb)
+               iov-len start*))
        2))))
 
 
@@ -250,39 +250,39 @@ in the circular buffer and return the number of iovecs used."
           (load-time-value (lognot (1- (cffi:foreign-type-size :long))))))
 
 (defun cmsg-firsthdr (msghdr)
-  (cffi:with-foreign-slots ((ffi:msg-controllen ffi:msg-control)
-                            msghdr (:struct ffi:msghdr))
-    (when (plusp ffi:msg-controllen)
-      ffi:msg-control)))
+  (cffi:with-foreign-slots ((msg-controllen msg-control)
+                            msghdr (:struct msghdr))
+    (when (plusp msg-controllen)
+      msg-control)))
 
 (defun cmsg-nxthdr (msghdr cmsghdr)
-  (cffi:with-foreign-slots ((ffi:msg-control ffi:msg-controllen)
-                            msghdr (:struct ffi:msghdr))
+  (cffi:with-foreign-slots ((msg-control msg-controllen)
+                            msghdr (:struct msghdr))
     (let ((ptr (cffi:inc-pointer
                  cmsghdr
                  (cmsg-align (cffi:foreign-slot-value
-                               cmsghdr '(:struct ffi:cmsghdr)
-                               'ffi:cmsg-len)))))
+                               cmsghdr '(:struct cmsghdr)
+                               'cmsg-len)))))
       (unless (> (+ (cffi:pointer-address ptr) 1
-                    (- (cffi:pointer-address ffi:msg-control)))
-                 ffi:msg-controllen)
+                    (- (cffi:pointer-address msg-control)))
+                 msg-controllen)
         ptr))))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun cmsg-space (length)
     (declare (type fixnum length))
-    (+ (load-time-value (cffi:foreign-type-size '(:struct ffi:cmsghdr)))
+    (+ (load-time-value (cffi:foreign-type-size '(:struct cmsghdr)))
        (cmsg-align length))))
 
 (defun cmsg-len (length)
   (declare (type fixnum length))
-  (+ (load-time-value (cffi:foreign-type-size '(:struct ffi:cmsghdr)))
+  (+ (load-time-value (cffi:foreign-type-size '(:struct cmsghdr)))
      length))
 
 (defun cmsg-data (cmsg)
   (cffi:inc-pointer
     cmsg
-    (load-time-value (cffi:foreign-type-size '(:struct ffi:cmsghdr)))))
+    (load-time-value (cffi:foreign-type-size '(:struct cmsghdr)))))
 
 (defconstant +cspace+
   (cmsg-space (* +max-fds-out+ (cffi:foreign-type-size :int))))
@@ -304,36 +304,36 @@ in the circular buffer and return the number of iovecs used."
   (:documentation "A binary binary local socket connected to a Wayland compositor"))
 
 (defun make-socket ()
-  (let ((sockfd (ffi:socket ffi:+af-local+ ffi:+sock-stream+ 0)))
+  (let ((sockfd (socket +af-local+ +sock-stream+ 0)))
     (when (minusp sockfd)
-      (error "Can't create socket: ~A" (ffi:strerror ffi:*errno*)))
+      (error "Can't create socket: ~A" (strerror *errno*)))
     (make-instance 'data-socket :fd sockfd)))
 
 (defconstant +sun-path-length+
              (* (cffi:foreign-slot-count
-                  '(:struct ffi:sockaddr-un) 'ffi:sun-path)
+                  '(:struct sockaddr-un) 'sun-path)
                 (cffi:foreign-type-size
                   (cffi:foreign-slot-type
-                    '(:struct ffi:sockaddr-un) 'ffi:sun-path))))
+                    '(:struct sockaddr-un) 'sun-path))))
 
 (defun connect (socket address-string)
-  (cffi:with-foreign-object (sun '(:struct ffi:sockaddr-un))
-    (ffi:bzero sun (cffi:foreign-type-size '(:struct ffi:sockaddr-un)))
+  (cffi:with-foreign-object (sun '(:struct sockaddr-un))
+    (bzero sun (cffi:foreign-type-size '(:struct sockaddr-un)))
     (setf (cffi:foreign-slot-value
-            sun '(:struct ffi:sockaddr-un) 'ffi:sun-family)
-          ffi:+af-local+)
+            sun '(:struct sockaddr-un) 'sun-family)
+          +af-local+)
     (cffi:lisp-string-to-foreign
       address-string sun +sun-path-length+
-      :offset (cffi:foreign-slot-offset '(:struct ffi:sockaddr-un) 'ffi:sun-path))
+      :offset (cffi:foreign-slot-offset '(:struct sockaddr-un) 'sun-path))
 
-    (when (minusp (ffi:connect (slot-value socket '%fd) sun
-                               (cffi:foreign-type-size '(:struct ffi:sockaddr-un))))
-      (error "Can't connect socket: ~A" (ffi:strerror ffi:*errno*)))))
+    (when (minusp (connect-fd (slot-value socket '%fd) sun
+                              (cffi:foreign-type-size '(:struct sockaddr-un))))
+      (error "Can't connect socket: ~A" (strerror *errno*)))))
 
 (defun %clear-socket-input (socket)
   (with-slots (%input-iobuf %input-fdbuf) socket
     (loop :while (plusp (cb-length %input-fdbuf))
-          :do (ffi:close (cb-pull-number %input-fdbuf :int)))
+          :do (close-fd (cb-pull-number %input-fdbuf :int)))
     (cb-clear %input-iobuf)))
 
 (defgeneric close-socket (socket)
@@ -345,8 +345,8 @@ in the circular buffer and return the number of iovecs used."
      (when %output-iobuf (free-circular-buffer %output-iobuf))
      (when %output-fdbuf (free-circular-buffer %output-fdbuf))
 
-     (when (minusp (ffi:close %fd))
-       (error "Cannot close stream: ~A" (ffi:strerror ffi:*errno*)))
+     (when (minusp (close-fd %fd))
+       (error "Cannot close stream: ~A" (strerror *errno*)))
      (setf %fd nil)
      t)))
 
@@ -363,11 +363,11 @@ in the circular buffer and return the number of iovecs used."
          (length (cb-length output-fdbuf)))
     (if (plusp length)
         (progn
-          (cffi:with-foreign-slots ((ffi:cmsg-level ffi:cmsg-type ffi:cmsg-len)
-                                    cmsghdr (:struct ffi:cmsghdr))
-            (setf ffi:cmsg-level ffi:+sol-socket+
-                  ffi:cmsg-type ffi:+scm-rights+
-                  ffi:cmsg-len (+ length (cffi:foreign-type-size '(:struct ffi:cmsghdr)))))
+          (cffi:with-foreign-slots ((cmsg-level cmsg-type cmsg-len)
+                                    cmsghdr (:struct cmsghdr))
+            (setf cmsg-level +sol-socket+
+                  cmsg-type +scm-rights+
+                  cmsg-len (+ length (cffi:foreign-type-size '(:struct cmsghdr)))))
           (cb-copy output-fdbuf cmsgdata)
           (cmsg-len length))
         0)))
@@ -382,25 +382,25 @@ in the circular buffer and return the number of iovecs used."
       (assert (zerop (cb-length %output-fdbuf)))
       (return-from %flush-output))
 
-    (cffi:with-foreign-objects ((msgh '(:struct ffi:msghdr))
-                                (iov '(:struct ffi:iovec) 2)
+    (cffi:with-foreign-objects ((msgh '(:struct msghdr))
+                                (iov '(:struct iovec) 2)
                                 (cmsgh :uint8 +cspace+))
-      (ffi:bzero msgh (cffi:foreign-type-size '(:struct ffi:msghdr)))
-      (cffi:with-foreign-slots ((ffi:msg-iov ffi:msg-iovlen
-                                             ffi:msg-control ffi:msg-controllen)
-                                msgh (:struct ffi:msghdr))
-        (setf ffi:msg-iov iov
-              ffi:msg-iovlen (cb-prepare-gather-iovec %output-iobuf iov)
-              ffi:msg-control cmsgh
-              ffi:msg-controllen (%prepare-gather-cmsg cmsgh %output-fdbuf)))
+      (bzero msgh (cffi:foreign-type-size '(:struct msghdr)))
+      (cffi:with-foreign-slots ((msg-iov msg-iovlen
+                                 msg-control msg-controllen)
+                                msgh (:struct msghdr))
+        (setf msg-iov iov
+              msg-iovlen (cb-prepare-gather-iovec %output-iobuf iov)
+              msg-control cmsgh
+              msg-controllen (%prepare-gather-cmsg cmsgh %output-fdbuf)))
 
-      (let ((nread (ffi:sendmsg %fd msgh ())))
+      (let ((nread (sendmsg %fd msgh ())))
         (when (minusp nread)
-          (let ((errno ffi:*errno*))
+          (let ((errno *errno*))
             (if (or (eq errno :ewouldblock)
                     (eq errno :eagain))
                 (return-from %flush-output)
-                (error "Can't write to stream: ~A" (ffi:strerror errno)))))
+                (error "Can't write to stream: ~A" (strerror errno)))))
 
         (cb-clear %output-fdbuf)
         (cb-shiftout %output-iobuf nread)))))
@@ -432,30 +432,30 @@ in the circular buffer and return the number of iovecs used."
 ;; Read data from the socket into thebuffer.
 (defun %read-once (socket nonblocking?)
   (with-slots (%fd %input-iobuf %input-fdbuf) socket
-    (cffi:with-foreign-objects ((msgh '(:struct ffi:msghdr))
-                                (iov '(:struct ffi:iovec) 2)
+    (cffi:with-foreign-objects ((msgh '(:struct msghdr))
+                                (iov '(:struct iovec) 2)
                                 (cmsg :uint8 +cspace+))
-      (cffi:with-foreign-slots ((ffi:msg-name ffi:msg-namelen
-                                 ffi:msg-iov ffi:msg-iovlen
-                                 ffi:msg-control ffi:msg-controllen
-                                 ffi:msg-flags)
-                                msgh (:struct ffi:msghdr))
-        (setf ffi:msg-name (cffi:null-pointer)
-              ffi:msg-namelen 0
-              ffi:msg-iov iov
-              ffi:msg-iovlen (cb-prepare-scatter-iovec %input-iobuf iov)
-              ffi:msg-control cmsg
-              ffi:msg-controllen +cspace+
-              ffi:msg-flags 0))
+      (cffi:with-foreign-slots ((msg-name msg-namelen
+                                 msg-iov msg-iovlen
+                                 msg-control msg-controllen
+                                 msg-flags)
+                                msgh (:struct msghdr))
+        (setf msg-name (cffi:null-pointer)
+              msg-namelen 0
+              msg-iov iov
+              msg-iovlen (cb-prepare-scatter-iovec %input-iobuf iov)
+              msg-control cmsg
+              msg-controllen +cspace+
+              msg-flags 0))
 
-      (let ((nread (ffi:recvmsg %fd msgh (when nonblocking? '(:dontwait)))))
+      (let ((nread (recvmsg %fd msgh (when nonblocking? '(:dontwait)))))
         (when (minusp nread)
-          (let ((errno ffi:*errno*))
+          (let ((errno *errno*))
             (if (or (eq errno :ewouldblock)
                     (eq errno :eagain))
                 (return-from %read-once 0)
                 (error "Can't read from socket: ~A"
-                       (ffi:strerror ffi:*errno*)))))
+                       (strerror *errno*)))))
         (cb-shiftin %input-iobuf nread)
 
         ;; Read ctl messages
@@ -467,17 +467,17 @@ in the circular buffer and return the number of iovecs used."
             ((null cmsgh)
              (when overflow?
                (error "Overflow: too many unread file descriptors")))
-            (cffi:with-foreign-slots ((ffi:cmsg-len ffi:cmsg-level ffi:cmsg-type)
-                                      cmsgh (:struct ffi:cmsghdr))
-              (when (and (= ffi:cmsg-level ffi:+sol-socket+)
-                         (= ffi:cmsg-type ffi:+scm-rights+))
-                (setf size (- ffi:cmsg-len (cmsg-len 0))
+            (cffi:with-foreign-slots ((cmsg-len cmsg-level cmsg-type)
+                                      cmsgh (:struct cmsghdr))
+              (when (and (= cmsg-level +sol-socket+)
+                         (= cmsg-type +scm-rights+))
+                (setf size (- cmsg-len (cmsg-len 0))
                       max (cb-free-space %input-fdbuf))
                 (if (or (> size max) overflow?)
                     (progn
                       (setf overflow? t)
                       (dotimes (i (floor size (cffi:foreign-type-size :int)))
-                        (ffi:close (cffi:mem-aref (cmsg-data cmsgh) :int i))))
+                        (close-fd (cffi:mem-aref (cmsg-data cmsgh) :int i))))
                     (cb-push-foreign-octets
                       %input-fdbuf (cmsg-data cmsgh) size)))))
         nread))))
@@ -559,13 +559,13 @@ in the circular buffer and return the number of iovecs used."
   (let ((length (length octet-vector)))
     (cffi:with-pointer-to-vector-data (carray octet-vector)
       (setf (cffi:mem-ref cptr :uint32 offset) length)
-      (ffi:memcpy (cffi:inc-pointer cptr (+ offset 4)) carray length))))
+      (memcpy (cffi:inc-pointer cptr (+ offset 4)) carray length))))
 
 ;; Write a null-terminated UTF-8 encoded string
 (defun %write-wl-string (string cptr offset)
   (cffi:with-foreign-string ((cstr size) string :encoding :utf-8)
     (setf (cffi:mem-ref cptr :uint32 offset) size)
-    (ffi:memcpy (cffi:inc-pointer cptr (+ offset 4)) cstr size)))
+    (memcpy (cffi:inc-pointer cptr (+ offset 4)) cstr size)))
 
 (defmacro send-wl-message ((socket sender-id opcode) types &rest objects)
   (with-gensyms (sock offset cptr size)

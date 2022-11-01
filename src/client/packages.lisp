@@ -4,10 +4,10 @@
 ;;; This work is licensed under the BSD 3-Clause License.
 ;;; See LICENSE for more details.
 
-(defpackage #:xyz.shunter.wayflan.client
+(uiop:define-package #:xyz.shunter.wayflan.client
   (:nicknames #:wayflan-client)
-  (:use #:cl #:alexandria)
-  (:local-nicknames (#:wire #:xyz.shunter.wayflan.wire))
+  (:use #:cl #:alexandria #:xyz.shunter.wayflan.wire)
+  (:use-reexport #:xyz.shunter.wayflan)
   (:export #:wl-interface-class
            #:wl-interface-version
            #:wl-interface-name
@@ -62,8 +62,7 @@ The clients can be traditional applications, X servers (rootless or fullscreen),
 This package defines the client's interpretation of various CLOS classes, the event protocol, define- macros to implement wayland protocols, and the core Wayland protocol."))
 
 (defpackage #:xyz.shunter.wayflan.client.scanner
-  (:use #:cl #:alexandria #:xyz.shunter.wayflan)
-  (:local-nicknames (#:client #:xyz.shunter.wayflan.client))
+  (:use #:cl #:alexandria #:xyz.shunter.wayflan.client)
   (:export #:wl-include)
   (:documentation "PRIVATE: Wayland XML protocol definitions auto-wrapper.
 
