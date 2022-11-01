@@ -32,7 +32,7 @@
            #:wl-summary
            #:wl-text
 
-           #:parse
+           #:wl-parse
 
            #:wl-int
            #:wl-uint

@@ -25,7 +25,7 @@
                 :initarg :interfaces)))
 
 (defclass wl-interface (%wl-named-object)
-  ((%version :type (unsigned-byte 32) :reader wl-version
+  ((%version :type wl-uint :reader wl-version
              :initarg :version :initform 1)
    (%description :type (or wl-description null) :reader wl-description
                  :initarg :description :initform nil)
@@ -42,19 +42,23 @@
 (defclass %wl-message (%wl-named-object)
   ((%type :type %wl-message-type :reader wl-type
           :initarg :type :initform nil)
-   (%since :type (unsigned-byte 32) :reader wl-since
-           :initarg :since :initform 1)
+   (%since :type wl-uint :reader wl-since
+           :initarg :since :initform 1
+           :documentation "The version of the parent interface since the message was introduced")
    (%description :type (or wl-description null) :reader wl-description
                  :initarg :description :initform nil)
    (%args :reader wl-args
           :initarg :args)))
 
-(defclass wl-request (%wl-message) ())
-(defclass wl-event (%wl-message) ())
+(defclass wl-request (%wl-message) ()
+  (:documentation "Represents a message from a client to the compositor"))
+(defclass wl-event (%wl-message) ()
+  (:documentation "Represents a message from the compositor to a client"))
 
 (defclass wl-enum (%wl-named-object)
-  ((%since :type (unsigned-byte 32) :reader wl-since
-           :initarg :since :initform 1)
+  ((%since :type wl-uint :reader wl-since
+           :initarg :since :initform 1
+           :documentation "The version of the parent interface since the enum was introduced")
    (%bitfield :type boolean :reader wl-bitfield
               :initarg :bitfield :initform nil)
    (%description :type (or wl-description null) :reader wl-description
@@ -63,12 +67,13 @@
              :initarg :entries :initform nil)))
 
 (defclass wl-entry (%wl-named-object)
-  ((%value :type (unsigned-integer 32) :reader wl-value
+  ((%value :type wl-uint :reader wl-value
            :initarg :value)
    (%summary :type (or string null) :reader wl-summary
              :initarg :summary :initform nil)
-   (%since :type (unsigned-byte 32) :reader wl-since
-           :initarg :since :initform 1)
+   (%since :type wl-uint :reader wl-since
+           :initarg :since :initform 1
+           :documentation "The version of the parent interface since the entry was introduced")
    (%description :type (or wl-description null) :reader wl-description
                  :initarg :description :initform nil)))
 
@@ -227,7 +232,7 @@
          (%optionally* (it node "summary")
            :summary it)))
 
-(defun parse (input)
+(defun wl-parse (input)
   (%protocol-of
     (first (plump:get-elements-by-tag-name
              (let ((plump:*tag-dispatchers* plump:*xml-tags*))

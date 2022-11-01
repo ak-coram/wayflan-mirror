@@ -150,6 +150,6 @@ EXPORT - If true, export all interned symbols in the current package."
   (let ((*exclude-defclasses* exclude-defclasses)
         *syms-to-export*)
     `(progn
-       ,@(%transform-protocol (parse (%pathname-or-input (eval input))))
+       ,@(%transform-protocol (wl-parse (%pathname-or-input (eval input))))
        ,(when export
           `(export ',*syms-to-export*)))))
