@@ -22,7 +22,9 @@
    (%description :type (or wl-description null) :reader wl-description
                  :initarg :description :initform nil)
    (%interfaces :reader wl-interfaces
-                :initarg :interfaces)))
+                :initarg :interfaces))
+  (:documentation
+    "A protocol (as opposed to *the* Wayland protocol) is a collection of interfaces and their requests and events all meant to accomplish some shared aim. Protocols are typically defined in XML documents and are defined by libwayland's wayland-scanner program."))
 
 (defclass wl-interface (%wl-named-object)
   ((%version :type wl-uint :reader wl-version
@@ -34,7 +36,10 @@
    (%events :reader wl-events
             :initarg :events)
    (%enums :reader wl-enums
-           :initarg :enums)))
+           :initarg :enums))
+  (:documentation
+    "Interfaces consist of requests that a client can invoke as a method, and requests that a server can emit. All Wayland objects implement one interface.
+Interfaces are message-based. Requests are actuated as server-bound messages, while events are client-bound. Both requests and events have opcodes set by the order each was defined, and identify which request or event to act on."))
 
 (deftype %wl-message-type ()
   '(member :desctuctor nil))

@@ -1,7 +1,7 @@
 # API Reference - Wayflan Client
 
 The wayflan-client package includes all symbols from the [wayflan
-package](./API-Reference) plus the interface for connecting to, sending
+package](./API-Reference.md) plus the interface for connecting to, sending
 messages to, and dispatching events from a compositor.
 
 ## [Metaclass] __wl-interface-class__ (__standard-class__)
@@ -123,25 +123,14 @@ Convert *keyword* into an integer according to *enum*.
 Convert *integer* into a keyword (or, in the case of bitfield enums, a list of
 keywords), according to *enum*.
 
-## [Condition] __wl-error__ (__error__)
-
-**Description:**
-
-Signaled when a fatal error has occurred.
-
-- **wl-error-object** => *number* -- the object id
-- **wl-error-code** => *number* -- the error code
-- **wl-error-message** => *string* -- the error message
-
-## [Function] **display-pathname** *&optional name* => *pathname*
-
-Return the absolute pathname to a Wayland compositor socket given the name of
-the connection.
-
 ## [Function] **wl-display-connect** *&optional name* => *display*
 
 Connect to a Wayland compositor and return a __wl-display__ owning the
 connection.
+
+## [Function] **wl-display-disconnect** *display*
+
+Disconnect the display from the server and mark all proxies as destroyed.
 
 ## [Function] **wl-display-listen** *display* => *boolean*
 
@@ -155,6 +144,9 @@ Read and dispatch the display's next event.
 
 Block and dispatch events until all requests up to this point have been
 finalized.
+
+Mechanically this is done by wl-display.sync and dispatching events until its
+associated callback is done.
 
 ## [Macro] **with-open-display** *(display &rest options) &body body* => *result*
 
@@ -189,7 +181,7 @@ Bind *var* to *proxy*, evaluate the *body*, return a value, and destroy
 The *proxy* is destroyed when execution exits the *body*, no matter whether the
 exit was normal or abnormal.
 
-## [Macro] **event-case**, **event-ccase**, **event-ecase** *event &body clauses*
+## [Macros] **event-case**, **event-ccase**, **event-ecase** *event &body clauses*
 
 `clause := (event-name (destructuring-lambda-list...) body...)`
 
@@ -199,7 +191,7 @@ Select the clause by matching the *event-name* with the event type. If a clause
 is selected, bind the event arguments by the *destructuring-lambda-list* and
 run the clause *body*.
 
-## [Macro] **evlambda**, **evclambda**, **evelambda** *&body clauses*
+## [Macros] **evlambda**, **evclambda**, **evelambda** *&body clauses*
 
 `clause := (event-name (destructuring-lambda-list...) body...)`
 

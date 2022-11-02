@@ -4,18 +4,21 @@
 
 ![The library brand image: a crudely drawn plate of flan with a W on the roof](./brand.png)
 
-Wayflan is a from-scratch Wayland client for Common Lisp. It does not bind to
-the reference implementation [libwayland](https://wayland.freedesktop.org/),
-but rather writes to a Wayland socket directly. This gives Wayflan better
-opportunity to integrate with Common Lisp's features without having to deal
-with the drawbacks of C bindings -- and C callbacks.
+Wayflan is a from-scratch Wayland communication library for Common Lisp. It is
+not a binding or a wrapper around
+[libwayland](https://wayland.freedesktop.org/), but a re-implementation of the
+Wayland protocol. This unties Lisp applications from per-proxy manual memory
+allocation, toplevel-only C callbacks, and enables a closer interface with CLOS
+and CLCS.
 
-Wayflan makes a good-faith effort to mimic libwayland behavior made outside the
-Wayland spec, such as sending message data and file descriptors in the same
-message, and searching for Wayland compositor sockets in the same path.
+Wayflan makes a good-faith effort to mimic libwayland behavior not defined in
+the Wayland spec, to keep compatibility between the two libraries.
+
+Wayflan is not a compositor nor a GUI toolkit. Its purpose is to parse Wayland
+protocol XML documents and exchange Wayland messages between other processes.
 
 *Wayflan is an ongoing project. Things may change to make Wayflan the best
-client for Common Lisp projects, including making a better API. If you use
+client for Common Lisp projects, such as iterating on a better API. If you use
 Wayflan in any projects, let me know! I'd love to give a heads up and help
 transition projects to any breaking changes I make along the way.*
 
@@ -24,13 +27,22 @@ transition projects to any breaking changes I make along the way.*
 - All implementation done in Common Lisp from the socket up
 - Enum values are translated into keywords
 - Wayland protocol introspection
-- ASDF component `(:wayflan-client-impl "protocol-file" :in-package "the-pkg")`
-  Generates bindings from `protocol-file.xml` into the specified package
+- ASDF component `:wayflan-client-impl` generates code from XML. ASDF's
+  extensible components make it possible to teach your program new protocols
+  for Wayland without the need of a special build system.
+
+## Road map
+
+Wayflan is currently only a communication library for Wayland clients, but
+intends to be a full-duplex library for both Clients and Compositors. The
+Wayflan project [tracker](https://todo.sr.ht/~shunter/wayflan) lists all
+tickets to improve Wayflan, and other Common Lisp systems related to the Linux
+desktop.
 
 ## Documentation
 
 - [Getting Started with Wayflan](./doc/Getting-Started-With-Wayflan-Client.md)
-- [API Reference for Wayflan](./doc/Client-API-Reference.md)
+- [API Reference for Wayflan Client](./doc/Client-API-Reference.md)
 - [Wayland Home Page](https://wayland.freedesktop.org/)
 - [Wayland Book](https://wayland-book.com/) - Teaches Wayland fundamentals and shares examples in C.
 - [Wayland Explorer](https://wayland.app/protocols/) - Browse Wayland protocols online

@@ -35,11 +35,6 @@
            #:wl-display-dispatch-event
            #:wl-display-roundtrip
 
-           #:define-interface
-           #:define-enum
-           #:define-request
-           #:define-event
-
            #:with-open-display
            #:with-proxy
            #:event-case
@@ -47,7 +42,12 @@
            #:event-ecase
            #:evlambda
            #:evclambda
-           #:evelambda)
+           #:evelambda
+
+           #:define-interface
+           #:define-enum
+           #:define-request
+           #:define-event)
   (:documentation "Wayland client and core protocol implementation.
 
 Wayland is a protocol for a compositor to talk to its clients.

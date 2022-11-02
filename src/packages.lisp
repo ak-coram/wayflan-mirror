@@ -8,6 +8,24 @@
   (:nicknames #:wayflan)
   (:use #:cl #:alexandria #:asdf)
   (:export
+    ;; Types
+    #:wl-int
+    #:wl-uint
+    #:wl-fixed
+    #:wl-array
+
+    #:+most-positive-wl-uint+
+    #:+most-positive-wl-int+
+    #:+most-positive-wl-fixed+
+    #:+most-negative-wl-int+
+    #:+most-negative-wl-fixed+
+
+    ;; Conditions
+    #:wl-error
+    #:wl-socket-error
+    #:wl-message-error
+    #:wl-server-error
+
     ;; Protocol
     #:wl-protocol
     #:wl-interface
@@ -34,25 +52,7 @@
     #:wl-summary
     #:wl-text
 
-    #:wl-parse
-
-    ;; Types
-    #:wl-int
-    #:wl-uint
-    #:wl-fixed
-    #:wl-array
-
-    #:+most-positive-wl-uint+
-    #:+most-positive-wl-int+
-    #:+most-positive-wl-fixed+
-    #:+most-negative-wl-int+
-    #:+most-negative-wl-fixed+
-
-    ;; Conditions
-    #:wl-error
-    #:wl-socket-error
-    #:wl-message-error
-    #:wl-server-error)
+    #:wl-parse)
   (:documentation "Wayland protocol and type information
 
 Wayland is a protocol for a compositor to talk to its clients.

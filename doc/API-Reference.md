@@ -54,6 +54,13 @@ event from the server.
 
 ## [Class] __wl-protocol__
 
+**Description:**
+
+A protocol (as opposed to *the* Wayland protocol) is a collection of interfaces
+and their requests and events all meant to accomplish some shared aim.
+Protocols are typically defined in XML documents and are defined by
+libwayland's wayland-scanner program.
+
 **Readers:**
 
 - **Wl-name** => *string*
@@ -62,6 +69,15 @@ event from the server.
 - **wl-interfaces** => *wl-interface list*
 
 ## [Class] __wl-interface__
+
+**Description:**
+
+Interfaces consist of requests that a client can invoke as a method, and
+requests that a server can emit. All Wayland objects implement one interface.
+
+Interfaces are message-based. Requests are actuated as server-bound messages,
+while events are client-bound. Both requests and events have opcodes set by the
+order each was defined, and identify which request or event to act on.
 
 **Readers:**
 
