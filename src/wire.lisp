@@ -669,4 +669,5 @@ in the circular buffer and return the number of iovecs used."
        (lambda (,sender-id ,opcode ,carray ,size)
          (let ((,buf (make-buf ,carray ,size)))
            ,@body
-           (assert (= (buf-offset ,buf) (buf-size ,buf))))))))
+           (unless (= (buf-offset ,buf) (buf-size ,buf))
+             (error 'wl-message-error :summary "Message length mismatch")))))))

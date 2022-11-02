@@ -130,6 +130,12 @@
   "Return a proxy with the given ID."
   (gethash id (%proxy-table display)))
 
+(declaim (inline %find-proxy!))
+(defun %find-proxy! (display id)
+  (or (find-proxy display id)
+      (error 'wl-message-error
+             :summary (format nil "Object ID ~D doesn't exist" id))))
+
 (defun %set-proxy (display id new-proxy)
   "Assign a proxy with the given id to the table. Return NEW-PROXY."
   (setf (%wl-proxy-id new-proxy) id
@@ -189,7 +195,7 @@
     (case (first event)
       (:delete-id
         (destructuring-bind (id) (rest event)
-          (%destroy-proxy (find-proxy sender id))
+          (%destroy-proxy (%find-proxy! sender id))
           (remhash id (%proxy-table sender))))
       (:error
         (destructuring-bind (object code message) (rest event)
@@ -273,7 +279,7 @@ Return the number of events processed."
        events)
       (declare (type fixnum events))
       (with-incoming-message ((%wl-display-socket display) sender-id opcode buffer)
-        (setf sender (find-proxy display sender-id))
+        (setf sender (%find-proxy! display sender-id))
         (%dispatch-event
           sender (%read-event sender opcode buffer)))))
 
@@ -601,8 +607,7 @@ OPTIONS:
                            :object-id (read-wl-uint ,buffer))))
                    ((:object &key interface allow-null)
                     (@and
-                      `(find-proxy (wl-proxy-display ,proxy)
-                                   id)
+                      `(%find-proxy! (wl-proxy-display ,proxy) id)
                       (if allow-null
                           `(when id ,|@|)
                           @)
