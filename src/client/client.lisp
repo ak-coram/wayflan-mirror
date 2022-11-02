@@ -99,22 +99,6 @@
   (:interface-name . "wl_display")
   (:metaclass wl-interface-class))
 
-(define-condition wl-error (error)
-  ((%object :initarg :object :reader wl-error-object
-            :type (or wl-proxy null)
-            :documentation "object where the error occurred")
-   (%code :initarg :code :reader wl-error-code
-          :type wl-uint
-          :documentation "error code")
-   (%message :initarg :message :reader wl-error-message
-             :type string
-             :documentation "error description"))
-  (:report (lambda (cond stream)
-             (format stream "Error code ~D from ~S: ~A"
-                     (wl-error-code cond)
-                     (wl-error-object cond)
-                     (wl-error-message cond)))))
-
 (defmethod print-object ((object wl-proxy) stream)
   (print-unreadable-object (object stream :type t :identity t)
     (format stream "~S ~S ~S ~S ~S (~D)"
@@ -208,12 +192,16 @@
           (%destroy-proxy (find-proxy sender id))
           (remhash id (%proxy-table sender))))
       (:error
-        (destructuring-bind (object-id code message) (rest event)
-          (wl-display-disconnect sender)
-          (error 'wl-error
-                 :object object-id
-                 :code code
-                 :message message)))))
+        (destructuring-bind (object code message) (rest event)
+          ;; Disconnecting the display *after* the error so that the debugger
+          ;; has all the information of the display and its proxies the instant
+          ;; it received the error.
+          (unwind-protect
+            (error 'wl-server-error
+                   :object object
+                   :code code
+                   :message message)
+            (wl-display-disconnect sender))))))
 
   (dolist (hook (wl-proxy-hooks sender))
     (apply hook event)))

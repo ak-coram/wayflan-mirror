@@ -306,7 +306,7 @@ in the circular buffer and return the number of iovecs used."
 (defun make-socket ()
   (let ((sockfd (socket +af-local+ +sock-stream+ 0)))
     (when (minusp sockfd)
-      (error "Can't create socket: ~A" (strerror *errno*)))
+      (error 'wl-socket-error :summary "Cannot create socket"))
     (make-instance 'data-socket :fd sockfd)))
 
 (defconstant +sun-path-length+
@@ -328,7 +328,7 @@ in the circular buffer and return the number of iovecs used."
 
     (when (minusp (connect-fd (slot-value socket '%fd) sun
                               (cffi:foreign-type-size '(:struct sockaddr-un))))
-      (error "Can't connect socket: ~A" (strerror *errno*)))))
+      (error 'wl-socket-error :summary "Cannot connect socket"))))
 
 (defun %clear-socket-input (socket)
   (with-slots (%input-iobuf %input-fdbuf) socket
@@ -346,7 +346,7 @@ in the circular buffer and return the number of iovecs used."
      (when %output-fdbuf (free-circular-buffer %output-fdbuf))
 
      (when (minusp (close-fd %fd))
-       (error "Cannot close stream: ~A" (strerror *errno*)))
+       (error 'wl-socket-error :summary "Cannot close stream"))
      (setf %fd nil)
      t)))
 
@@ -394,16 +394,18 @@ in the circular buffer and return the number of iovecs used."
               msg-control cmsgh
               msg-controllen (%prepare-gather-cmsg cmsgh %output-fdbuf)))
 
-      (let ((nread (sendmsg %fd msgh ())))
-        (when (minusp nread)
+      (let ((nwrit (sendmsg %fd msgh ())))
+        (when (minusp nwrit)
           (let ((errno *errno*))
-            (if (or (eq errno :ewouldblock)
-                    (eq errno :eagain))
+            (if (or (= errno +ewouldblock+)
+                    (= errno +epipe+))
                 (return-from %flush-output)
-                (error "Can't write to stream: ~A" (strerror errno)))))
+                (error 'wl-socket-error
+                       :summary "Cannot write to socket"
+                       :errno errno))))
 
         (cb-clear %output-fdbuf)
-        (cb-shiftout %output-iobuf nread)))))
+        (cb-shiftout %output-iobuf nwrit)))))
 
 (defgeneric %write-fd (socket fd)
   (:method ((socket data-socket) fd)
@@ -451,11 +453,11 @@ in the circular buffer and return the number of iovecs used."
       (let ((nread (recvmsg %fd msgh (when nonblocking? '(:dontwait)))))
         (when (minusp nread)
           (let ((errno *errno*))
-            (if (or (eq errno :ewouldblock)
-                    (eq errno :eagain))
+            (if (= errno +ewouldblock+)
                 (return-from %read-once 0)
-                (error "Can't read from socket: ~A"
-                       (strerror *errno*)))))
+                (error 'wl-socket-error
+                       :summary "Cannot read from socket"
+                       :errno errno))))
         (cb-shiftin %input-iobuf nread)
 
         ;; Read ctl messages
@@ -466,7 +468,8 @@ in the circular buffer and return the number of iovecs used."
              max)
             ((null cmsgh)
              (when overflow?
-               (error "Overflow: too many unread file descriptors")))
+               (error 'wl-socket-error
+                      :summary "Overflow: too many unread file descriptors")))
             (cffi:with-foreign-slots ((cmsg-len cmsg-level cmsg-type)
                                       cmsgh (:struct cmsghdr))
               (when (and (= cmsg-level +sol-socket+)

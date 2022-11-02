@@ -79,16 +79,6 @@
   (src :pointer)
   (n size))
 
-(defcfun "memset" :pointer
-  (s :pointer)
-  (c :int)
-  (n size))
-
-(defcfun "memmove" :pointer
-  (dest :pointer)
-  (src :pointer)
-  (n size))
-
 (defcfun "strerror" :string
   (errnum errno))
 

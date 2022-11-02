@@ -20,6 +20,36 @@ The Wayflan package contains (1) A collection of types and constants related to 
 - **+most-positive-wl-fixed+** = -0x800000
 - **+most-negative-wl-fixed+** = 0x80000000/256
 
+# Conditions
+
+## [Condition] __wl-error__ (__error__)
+
+**Description:**
+
+Signaled when a fatal error has happened during Wayland communication.
+
+The conditions __wl-socket-error__, __wl-message-error__, and __wl-server-error__ are all disjoint conditions of __wl-error__.
+
+## [Condition] __wl-socket-error__ (__wl-error__)
+
+**Description:**
+
+Signaled due to an issue in a Wayland connection's underlying socket.
+
+## [Condition] __wl-message-error__ (__wl-error__)
+
+**Description:**
+
+Signaled due to a malformed Wayland message read within a Wayland session.
+
+## [Condition] __wl-server-error__ (__wl-error__)
+
+**Description:**
+
+Signaled due to a Wayland display reading a
+[wl_display::error](https://wayland.freedesktop.org/docs/html/apa.html#protocol-spec-wl_display)
+event from the server.
+
 # Protocol Classes
 
 ## [Class] __wl-protocol__

@@ -7,43 +7,52 @@
 (defpackage #:xyz.shunter.wayflan
   (:nicknames #:wayflan)
   (:use #:cl #:alexandria #:asdf)
-  (:export #:wl-protocol
-           #:wl-interface
-           #:wl-request
-           #:wl-event
-           #:wl-enum
-           #:wl-entry
-           #:wl-arg
-           #:wl-description
+  (:export
+    ;; Protocol
+    #:wl-protocol
+    #:wl-interface
+    #:wl-request
+    #:wl-event
+    #:wl-enum
+    #:wl-entry
+    #:wl-arg
+    #:wl-description
 
-           #:wl-name
-           #:wl-copyright
-           #:wl-interfaces
-           #:wl-version
-           #:wl-requests
-           #:wl-events
-           #:wl-enums
-           #:wl-type
-           #:wl-args
-           #:wl-since
-           #:wl-bitfield
-           #:wl-entries
-           #:wl-value
-           #:wl-summary
-           #:wl-text
+    #:wl-name
+    #:wl-copyright
+    #:wl-interfaces
+    #:wl-version
+    #:wl-requests
+    #:wl-events
+    #:wl-enums
+    #:wl-type
+    #:wl-args
+    #:wl-since
+    #:wl-bitfield
+    #:wl-entries
+    #:wl-value
+    #:wl-summary
+    #:wl-text
 
-           #:wl-parse
+    #:wl-parse
 
-           #:wl-int
-           #:wl-uint
-           #:wl-fixed
-           #:wl-array
+    ;; Types
+    #:wl-int
+    #:wl-uint
+    #:wl-fixed
+    #:wl-array
 
-           #:+most-positive-wl-uint+
-           #:+most-positive-wl-int+
-           #:+most-positive-wl-fixed+
-           #:+most-negative-wl-int+
-           #:+most-negative-wl-fixed+)
+    #:+most-positive-wl-uint+
+    #:+most-positive-wl-int+
+    #:+most-positive-wl-fixed+
+    #:+most-negative-wl-int+
+    #:+most-negative-wl-fixed+
+
+    ;; Conditions
+    #:wl-error
+    #:wl-socket-error
+    #:wl-message-error
+    #:wl-server-error)
   (:documentation "Wayland protocol and type information
 
 Wayland is a protocol for a compositor to talk to its clients.
@@ -66,6 +75,8 @@ This package defines Wayland protocol CLOS objects, a function that parses a pro
            #:+sock-stream+
            #:+sol-socket+
            #:+scm-rights+
+           #:+ewouldblock+
+           #:+epipe+
 
            #:iovec
            #:iov-base
@@ -99,10 +110,7 @@ This package defines Wayland protocol CLOS objects, a function that parses a pro
 
            #:bzero
            #:memcpy
-           #:memset
-           #:memmove
            #:strerror
-           #:errno
            #:*errno*)
   (:documentation "PRIVATE: This package is private to Wayflan, and its API is susceptible to change. Please do not use this package in your own code."))
 

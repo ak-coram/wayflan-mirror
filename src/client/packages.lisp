@@ -29,11 +29,6 @@
            #:wl-enum-value
            #:wl-enum-keyword
 
-           #:wl-error
-           #:wl-error-object
-           #:wl-error-code
-           #:wl-error-message
-
            #:wl-display-connect
            #:wl-display-disconnect
            #:wl-display-listen

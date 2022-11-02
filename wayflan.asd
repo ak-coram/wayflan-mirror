@@ -33,7 +33,8 @@
                (:file "types" :depends-on ("packages"))
                (:cffi-grovel-file "grovel" :depends-on ("packages"))
                (:file "ffi" :depends-on ("grovel"))
-               (:file "wire" :depends-on ("ffi" "types"))
+               (:file "conditions" :depends-on ("packages" "ffi"))
+               (:file "wire" :depends-on ("ffi" "types" "conditions"))
                (:module #:protocols
                         :pathname "protocols"
                         :components ((:static-file "wayland.xml")
