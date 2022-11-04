@@ -10,9 +10,10 @@
 
 ;; Wayland Interface
 
+;; Maps all Wayland interface names (communicated via the wl-registry) to their
+;; proxy class
 (defparameter *interface-table*
-  (make-hash-table :test 'equal)
-  "Maps all Wayland interface names to their proxy class")
+  (make-hash-table :test 'equal))
 
 (defun find-interface-named (name)
   "Return the interface linked to the given string NAME."
@@ -35,6 +36,9 @@
   (:method ((interface symbol))
    (wl-interface-name (find-class interface))))
 
+(deftype %wl-event-function ()
+  '(function (wl-proxy t) (cons symbol t)))
+
 (defclass wl-interface-class (standard-class)
   ((%version :type wl-uint
              :initarg :version
@@ -42,9 +46,12 @@
    (%interface-name :type string
                     :initarg :interface-name
                     :reader wl-interface-name)
-   (%event-table :type (vector function)
-                 :initform (make-array 0 :element-type 'function
-                                       :adjustable t))))
+   (%event-table :type (vector %wl-event-function)
+                 :initform (make-array 0
+                                       :element-type '%wl-event-function
+                                       :adjustable t)))
+  (:documentation
+    "Metaclass to all wl-proxy subclasses. Stores the interface version, regitry name, and event dispatching methods."))
 
 (defmethod closer-mop:validate-superclass ((class wl-interface-class)
                                            (superclass standard-class))
@@ -76,7 +83,7 @@
               :reader deletedp)
    (%hooks :initform ()
            :accessor wl-proxy-hooks))
-  (:documentation "A protocol object on the client side"))
+  (:documentation "A protocol object on the client side representing a server's resource"))
 
 (defmacro %check-proxy (proxy interface &optional version)
   (once-only (proxy)
@@ -223,7 +230,7 @@
       (error 'wl-message-error
              :summary (format nil "No opcode ~D for interface ~A"
                               opcode (class-of sender))))
-    (funcall (the function (aref %event-table opcode))
+    (funcall (the %wl-event-function (aref %event-table opcode))
              sender buffer)))
 
 ;; Display management
@@ -480,6 +487,10 @@ OPTIONS:
                        :test #'%wltype=
                        :key (curry #'%sgetf :type))))
   (%option-bind (documentation type since) options
+    (when type
+      (assert (= 1 (length type)))
+      (setf type (first type)))
+
     (flet ((arg-to-types (arg)
              ;; The wire types each wayland type is composed of
              (%specifier-bind (arg-name &key type &allow-other-keys) arg
@@ -523,7 +534,7 @@ OPTIONS:
                       `(,arg-name)))
                  (t `(,arg-name))))))
 
-      (let* ((destructor? (eq (first type) :destructor))
+      (let* ((destructor? (eq type :destructor))
              (new-id-arg (find :new-id arg-specifiers
                                :test #'%wltype=
                                :key (curry #'%sgetf :type)))
@@ -593,13 +604,13 @@ ARG-SPECIFIERS - Each specifier takes the lambda list (name &key type documentat
 
 OPTIONS:
 
-(:DOCUMENTATION DOCSTRING) - Provided to the event class as its docstring.
-(:TYPE TYPE) - Does nothing. So far, only :DESTRUCTOR is a valid type.
-(:SINCE VERSION) - TODO in the future, asserts that only proxies of this version of higher should receive this event."
+(:DOCUMENTATION DOCSTRING) - Describes the event. This option does not change any behavior.
+(:TYPE TYPE) - So far, only :DESTRUCTOR is a valid type. This option does not change any behavior.
+(:SINCE VERSION) - Asserts that only proxies of this version of higher should receive this event."
   (%option-bind (since) options
-    ;; TODO throw an error if the interface's version doesn't support this
-    ;; event (error on the server's fault)
-    (declare (ignore since))
+    (when since
+      (assert (= 1 (length since)))
+      (setf since (first since)))
 
     (with-gensyms (proxy buffer)
       (flet ((arg-to-form (arg)
@@ -646,7 +657,14 @@ OPTIONS:
              (setf (aref table ,opcode)
                    (lambda (,proxy ,buffer)
                      ;; Empty messages may not use PROXY nor BUFFER.
-                     (declare (ignorable ,proxy ,buffer))
+                     (declare (ignorable ,proxy ,buffer)
+                              (type ,interface ,proxy))
+                     ,(when (and since (> since 1))
+                        `(unless (>= (wl-proxy-version ,proxy) ,since)
+                           (error 'wl-message-error
+                                  :summary (format nil "Server sent event ~S (:SINCE = ~D) on ~S (:VERSION = ~S)"
+                                                   ',name ,since ,proxy (wl-proxy-version ,proxy)))))
+
                      (list ',name ,@(mapcar #'arg-to-form arg-specifiers)))))
            ',name)))))
 
