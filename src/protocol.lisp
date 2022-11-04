@@ -122,8 +122,21 @@ Interfaces are message-based. Requests are actuated as server-bound messages, wh
          (string-upcase string))))
 
 (defun %text (dom)
-  (string-trim #(#\Newline #\Space #\Tab)
-               (plump:text dom)))
+  (flet ((whitespace-p (c)
+           (declare (type character c))
+           (position c (load-time-value
+                         (coerce #(#\Space #\Newline #\Tab #\Return #\Page)
+                                 'string)))))
+    (with-output-to-string (out)
+      (do* ((text (the string (plump:text dom)))
+            (prev nil i)
+            (i (position-if-not #'whitespace-p text)
+               (position-if-not #'whitespace-p text
+                                :start (1+ i))))
+        ((null i))
+        (when (and prev (> i (1+ prev)))
+          (write-char #\Space out))
+        (write-char (char text i) out)))))
 
 (defun %parse-integer (string)
   (if (and (>= (length string) 2)
@@ -187,7 +200,7 @@ Interfaces are message-based. Requests are actuated as server-bound messages, wh
          :name (plump:attribute node "name")
          (append
            (%optionally* (it node "since")
-             :since it)
+             :since (%parse-integer it))
            (%optionally* (it node "bitfield")
              :bitfield (not (string= it "false")))
            (%optionally (it node "description")
