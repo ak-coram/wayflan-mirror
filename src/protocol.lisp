@@ -121,22 +121,41 @@ Interfaces are message-based. Requests are actuated as server-bound messages, wh
                #\- c))
          (string-upcase string))))
 
-(defun %text (dom)
+(defun %text (dom folding-function)
   (flet ((whitespace-p (c)
            (declare (type character c))
            (position c (load-time-value
-                         (coerce #(#\Space #\Newline #\Tab #\Return #\Page)
+                         (coerce #(#\Space #\Tab #\Return #\Page)
                                  'string)))))
     (with-output-to-string (out)
-      (do* ((text (the string (plump:text dom)))
+      (do* ((text (string-trim #(#\Newline #\Space #\Tab #\Return #\Page)
+                               (plump:text dom)))
             (prev nil i)
-            (i (position-if-not #'whitespace-p text)
-               (position-if-not #'whitespace-p text
-                                :start (1+ i))))
-        ((null i))
+            (i (position-if-not #'whitespace-p text)))
+        ((or (null i) (>= i (length text))))
         (when (and prev (> i (1+ prev)))
           (write-char #\Space out))
-        (write-char (char text i) out)))))
+        (if (char= (char text i) #\Newline)
+            (progn
+              (write-char (funcall folding-function t) out)
+              (setf i (position-if-not #'whitespace-p text :start (1+ i))))
+            (progn (write-char (char text i) out)
+                   (funcall folding-function nil)
+                   (incf i)))))))
+
+(defun %folding-text (dom)
+  (%text dom
+         (let (print-newline?)
+           (lambda (newline?)
+             (if newline?
+                 (if print-newline?
+                     #\Newline
+                     (progn (setf print-newline? t)
+                            #\Space))
+                 (setf print-newline? nil))))))
+
+(defun %literal-text (dom)
+  (%text dom (constantly #\Newline)))
 
 (defun %parse-integer (string)
   (if (and (>= (length string) 2)
@@ -151,7 +170,7 @@ Interfaces are message-based. Requests are actuated as server-bound messages, wh
          :name (plump:attribute node "name")
          (append
            (%optionally (it node "copyright")
-             :copyright (%text it))
+             :copyright (%literal-text it))
            (%optionally (it node "description")
              :description (%description-of it))
            (list :interfaces
@@ -162,7 +181,7 @@ Interfaces are message-based. Requests are actuated as server-bound messages, wh
          (append
            (%optionally* (it node "summary")
              :summary it)
-           (list :text (%text node)))))
+           (list :text (%folding-text node)))))
 
 (defun %interface-of (node)
   (apply #'make-instance 'wl-interface
