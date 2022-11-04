@@ -14,7 +14,9 @@
 (defclass wayflan-client-impl (cl-source-file)
   ((type :initform "xml")
    (in-package :initarg :in-package)
-   (export :initarg :export :initform nil)))
+   (export :initarg :export :initform nil))
+  (:documentation
+    "Generates and loads a lisp file pointing to a protocol XML document"))
 
 (defun wayflan-scan-output-file (c)
   (uiop:merge-pathnames*

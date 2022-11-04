@@ -1,7 +1,9 @@
 # Getting Started with Wayflan Client
 
 This document target those familiar with Wayland fundamentals, and aims to
-explain how each Wayland concept integrates into Wayflan.
+explain how each Wayland concept integrates into Wayflan. It starts with a
+refresher, and then a more in-depth look at how each Wayland concept maps to
+Lisp code.
 
 To help with brevity in the snippets, I'm assuming all forms are evaluated
 under `(use-package :wayflan-client)`.
@@ -182,6 +184,47 @@ functions will immediately affect all proxies it lives under:
 
 (push (alexandria:curry 'handle-pointer my-app pointer)
       (wl-proxy-hooks pointer))
+```
+
+## From Zero to Globals
+
+This code snippet connects to a Wayland server, grabs the registry, and then
+listens for a global event that broadcasts a `wl_compositor` global:
+
+```lisp
+(with-open-display (display)
+  (let (registry compositor)
+    (setf registry (wl-display.get-registry display))
+    ;; Add a closure that listens for wl_registry.global events
+    (push (evlambda
+            (:global (name interface version)
+             (when (string= interface "wl_compositor")
+               (setf compositor (wl-registry.bind
+                                  registry name 'wl-compositor 1)))))
+          (wl-proxy-hooks registry))
+
+    ;; Process all events up to this point
+    (wl-display-roundtrip display)
+
+    ;; !! Use the compositor and any other globals here
+    (print compositor)))
+```
+
+Alternatively instead of matching for the string name, you can match on the
+interface class name instead:
+
+```lisp
+(push (evlambda
+        (:global (name interface version)
+         (when (find-interface-named interface)
+           (case (class-name (find-interface-named interface))
+             (wl-compositor
+               (setf compositor (wl-registry.bind
+                                  registry name 'wl-compositor 5)))
+             (wl-shm
+               (setf shm (wl-registry.bind
+                           registry name 'wl-shm 1)))))))
+      (wl-proxy-hooks registry))
 ```
 
 ## Marshalling Enums

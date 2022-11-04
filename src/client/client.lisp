@@ -390,7 +390,7 @@ destructuring lambda-list bound under the case's body."
     clauses :from-end t))
 
 (defmacro define-interface (name () &body options)
-  "Define a wl-proxy CLOS subclass and assign the interface's name to the interface table, accessible via #'FIND-INTERFACE-NAMED.
+  "Define a wayland object interface as subclass of wl-proxy.
 
 NAME - The name of the interface class.
 
@@ -398,8 +398,6 @@ OPTIONS:
 
 (:version VERSION) - Latest supported version of the interface.
 (:documentation DOCSTRING) - Docstring attached to the defined class.
-(:skip-defclass BOOLEAN) - If true, do not define the interface class.
-                           Used by cl-autowrap when it reads wl_display.
 (:interface-name STRING) - The name of the interface as listed by the wl-registry on a wl-registry-global-event."
   (%option-bind (version documentation skip-defclass interface-name) options
     `(progn
@@ -438,15 +436,14 @@ OPTIONS:
         (push (car entry) result)))))
 
 (defmacro define-enum (name () &body (entry-specifiers &rest options))
-  "Define a parameter that associates each entry keyword with an index in the array.
-
+  " Defines an argument subtype that associates integer values with keyword symbols.
 NAME - The name of the enum class. Used as arguments in Wayland types :INT and :UINT.
 
 OPTIONS:
 
 (:since INTEGER) - The interface version since it appeared.
-(:documentation DOCSTRING) - Ignored.
-(:bitfield BOOLEAN) - Whether individual bits have specific meanings. If set, enums are decoded as a list of arguments, rather than a single argument."
+(:bitfield BOOLEAN) - Whether individual bits have specific meanings. If set, enums are coded as a list of keywords, rather than a single keyword.
+(:documentation DOCSTRING) - Ignored."
   (%option-bind (bitfield) options
     `(let ((table ',(mapcar (%slambda (argument value &key &allow-other-keys)
                               (cons argument value))
@@ -467,7 +464,7 @@ OPTIONS:
        ',name)))
 
 (defmacro define-request ((name interface opcode) &body (arg-specifiers &rest options))
-  "Define a function implementing the wl request.
+  "Define a function implementing the interface's request.
 DEFINE-REQUEST currently only supports up to one :NEW-ID argument per request.
 
 NAME - The name of the request function.
@@ -480,9 +477,9 @@ ARG-SPECIFIERS - Each specifier takes the lambda list (name &key type documentat
 
 OPTIONS:
 
-(:DOCUMENTATION STRING) - Provided to the function as its docstring.
 (:TYPE KEYWORD) - So far, only :DESTRUCTOR is a valid type.
-(:SINCE VERSION) - Minimum interface version of the proxy object."
+(:SINCE VERSION) - Minimum interface version of the proxy object.
+(:DOCUMENTATION STRING) - Provided to the function as its docstring."
   (assert (>= 1 (count :new-id arg-specifiers
                        :test #'%wltype=
                        :key (curry #'%sgetf :type))))
