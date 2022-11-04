@@ -22,10 +22,7 @@
   (:documentation
     "Error signaled due to an issue in a Wayland connection's underlying socket"))
 
-;; TODO raise this error if the message header's reported length mismatches the
-;; actual length
 ;; TODO raise this error if there is no opcode defined for an event
-;; TODO raise this error if a message contains an unmapped object id
 (define-condition wl-message-error (wl-error)
   ((%summary :type (or string null) :initarg :summary :initform nil))
   (:report (lambda (c s)

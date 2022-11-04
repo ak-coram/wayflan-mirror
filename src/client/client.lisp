@@ -41,7 +41,10 @@
              :reader wl-interface-version)
    (%interface-name :type string
                     :initarg :interface-name
-                    :reader wl-interface-name)))
+                    :reader wl-interface-name)
+   (%event-table :type (vector function)
+                 :initform (make-array 0 :element-type 'function
+                                       :adjustable t))))
 
 (defmethod closer-mop:validate-superclass ((class wl-interface-class)
                                            (superclass standard-class))
@@ -212,9 +215,16 @@
   (dolist (hook (wl-proxy-hooks sender))
     (apply hook event)))
 
-(defgeneric %read-event (sender opcode buffer)
-  (:documentation "Read an event sent from PROXY with the given OPCODE and fast-io BUFFER.
-READ-EVENT methods are defined by DEFINE-EVENT-READER."))
+;; Read an event sent from SENDER with the given OPCODE and
+;; with-incoming-message BUFFER.
+(defun %read-event (sender opcode buffer)
+  (with-slots (%event-table) (class-of sender)
+    (unless (< opcode (length %event-table))
+      (error 'wl-message-error
+             :summary (format nil "No opcode ~D for interface ~A"
+                              opcode (class-of sender))))
+    (funcall (the function (aref %event-table opcode))
+             sender buffer)))
 
 ;; Display management
 
@@ -584,14 +594,14 @@ ARG-SPECIFIERS - Each specifier takes the lambda list (name &key type documentat
 OPTIONS:
 
 (:DOCUMENTATION DOCSTRING) - Provided to the event class as its docstring.
-(:TYPE TYPE) - TODO does nothing. So far, only :DESTRUCTOR is a valid type.
+(:TYPE TYPE) - Does nothing. So far, only :DESTRUCTOR is a valid type.
 (:SINCE VERSION) - TODO in the future, asserts that only proxies of this version of higher should receive this event."
-  (%option-bind (documentation) options
+  (%option-bind (since) options
     ;; TODO throw an error if the interface's version doesn't support this
     ;; event (error on the server's fault)
+    (declare (ignore since))
 
-    ;; FIXME add support for destructor events.
-    (with-gensyms (proxy opcode-sym buffer)
+    (with-gensyms (proxy buffer)
       (flet ((arg-to-form (arg)
                (%specifier-bind (name &key type &allow-other-keys) arg
                  (declare (ignore name))
@@ -630,11 +640,14 @@ OPTIONS:
                    (:fd `(read-fd (%wl-display-socket
                                     (wl-proxy-display ,proxy))))))))
         `(progn
-           (defmethod %read-event ((,proxy ,interface)
-                                   (,opcode-sym (eql ,opcode))
-                                   ,buffer)
-             ,@documentation
-             (list ',name ,@(mapcar #'arg-to-form arg-specifiers)))
+           (let ((table (slot-value (find-class ',interface) '%event-table)))
+             (unless (< ,opcode (length table))
+               (adjust-array table (1+ ,opcode)))
+             (setf (aref table ,opcode)
+                   (lambda (,proxy ,buffer)
+                     ;; Empty messages may not use PROXY nor BUFFER.
+                     (declare (ignorable ,proxy ,buffer))
+                     (list ',name ,@(mapcar #'arg-to-form arg-specifiers)))))
            ',name)))))
 
 

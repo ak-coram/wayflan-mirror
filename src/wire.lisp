@@ -616,7 +616,8 @@ in the circular buffer and return the number of iovecs used."
   (incf (cadr buffer) delta))
 
 (defun check-size (buffer size)
-  (assert (>= (- (buf-size buffer) (buf-offset buffer)) size)))
+  (unless (>= (- (buf-size buffer) (buf-offset buffer)) size)
+    (error 'wl-message-error :summary "Message length mismatch")))
 
 (defun read-wl-int (buffer)
   (prog2
