@@ -8,8 +8,7 @@ Wayflan is a from-scratch Wayland communication library for Common Lisp. It is
 not a binding or a wrapper around
 [libwayland](https://wayland.freedesktop.org/), but a re-implementation of the
 Wayland protocol. This unties Lisp applications from per-proxy manual memory
-allocation, toplevel-only C callbacks, and enables a closer interface with CLOS
-and CLCS.
+allocation, toplevel-only C callbacks, and enables a closer interface with lisp.
 
 Wayflan makes a good-faith effort to mimic libwayland behavior not defined in
 the Wayland spec, to keep compatibility between the two libraries.
@@ -24,6 +23,7 @@ transition projects to any breaking changes I make along the way.*
 
 ## Features
 
+- Client support
 - All implementation done in Common Lisp from the socket up
 - Enum values are translated into keywords
 - Wayland protocol introspection
@@ -33,11 +33,11 @@ transition projects to any breaking changes I make along the way.*
 
 ## Road map
 
-Wayflan is currently only a communication library for Wayland clients, but
-intends to be a full-duplex library for both Clients and Compositors. The
-Wayflan project [tracker](https://todo.sr.ht/~shunter/wayflan) lists all
-tickets to improve Wayflan, and other Common Lisp systems related to the Linux
-desktop.
+Wayflan is currently only a single-threaded communication library for Wayland
+clients, but intends to be a full-duplex multi-threadable library for both
+Clients and Compositors. The Wayflan project
+[tracker](https://todo.sr.ht/~shunter/wayflan) lists all tickets to improve
+Wayflan and other systems for the Freedesktop stack.
 
 ## Documentation
 
@@ -51,7 +51,7 @@ desktop.
 
 This is a brief version of the [Hello World](./examples/hello-world.lisp) example.
 
-This snippet connects to a Wayland compositor to print all global variables the
+This snippet connects to a Wayland server to print all global variables the
 client can bind to:
 
 ```lisp
@@ -59,7 +59,7 @@ client can bind to:
 (use-package :wayflan-client)
 
 (defun run ()
-  ;; Try to connect to a compositor socket at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY.
+  ;; Try to connect to a server socket at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY.
   ;; If $WAYLAND_DISPLAY describes an absolute path, connect to that directly.
   (with-open-display (display)
     ;; Create a registry to provide a list of all

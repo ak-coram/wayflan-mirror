@@ -56,9 +56,9 @@ Interfaces are message-based. Requests are actuated as server-bound messages, wh
           :initarg :args)))
 
 (defclass wl-request (%wl-message) ()
-  (:documentation "Represents a message from a client to the compositor"))
+  (:documentation "Represents a message from a client to the server"))
 (defclass wl-event (%wl-message) ()
-  (:documentation "Represents a message from the compositor to a client"))
+  (:documentation "Represents a message from the server to a client"))
 
 (defclass wl-enum (%wl-named-object)
   ((%since :type wl-uint :reader wl-since

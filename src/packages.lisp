@@ -55,11 +55,10 @@
     #:wl-parse)
   (:documentation "Wayland protocol and type information
 
-Wayland is a protocol for a compositor to talk to its clients.
-The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
-The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
+Wayland is a protocol for clients to talk to a display server to make themselves visible or get input from the user.
+The server can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
 
-This package defines Wayland protocol CLOS objects, a function that parses a protocol document into CLOS, and a series of types of Wayland primitives."))
+This package defines Wayland protocol CLOS objects, a function that parses a protocol document into CLOS, and a series of Wayland primitives as lisp types."))
 
 (defpackage #:xyz.shunter.wayflan.ffi
   (:use #:cffi)
@@ -132,8 +131,4 @@ This package defines Wayland protocol CLOS objects, a function that parses a pro
            #:read-wl-string
            #:read-wl-array
            #:with-incoming-message)
-  (:documentation "PRIVATE: Wayland wire format marshalling.
-
-The wayland-wire package defines utilities for communicating primitive data through a local address socket
-
-PRIVATE: This package is private to Wayflan, and its API is susceptible to change. Please do not use this package in your own code."))
+  (:documentation "PRIVATE: This package is private to Wayflan, and its API is susceptible to change. Please do not use this package in your own code."))

@@ -92,7 +92,7 @@ order each was defined, and identify which request or event to act on.
 
 **Description:**
 
-Represents a message from a client to the compositor
+Represents a message from a client to the server
 
 **Readers:**
 
@@ -106,7 +106,7 @@ Represents a message from a client to the compositor
 
 **Description:**
 
-Represents a message from the compositor to a client
+Represents a message from the server to a client
 
 **Readers:**
 

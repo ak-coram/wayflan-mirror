@@ -300,8 +300,7 @@ in the circular buffer and return the number of iovecs used."
    (%input-fdbuf :initform (make-circular-buffer)
                 :type (or circular-buffer null))
    (%output-fdbuf :initform (make-circular-buffer)
-                 :type (or circular-buffer null)))
-  (:documentation "A binary binary local socket connected to a Wayland compositor"))
+                 :type (or circular-buffer null))))
 
 (defun make-socket ()
   (let ((sockfd (socket +af-local+ +sock-stream+ 0)))

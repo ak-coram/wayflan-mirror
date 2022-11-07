@@ -50,29 +50,23 @@
            #:define-event)
   (:documentation "Wayland client and core protocol implementation.
 
-Wayland is a protocol for a compositor to talk to its clients.
-The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
-The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
+Wayland is a protocol for clients to talk to a display server to make themselves visible or get input from the user.
+The server can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
 
-This package defines the client's interpretation of various CLOS classes, the event protocol, define- macros to implement wayland protocols, and the core Wayland protocol."))
+This package contains symbols to drive the clientside implementation of the Wayland protocol."))
 
 (defpackage #:xyz.shunter.wayflan.client.scanner
   (:use #:cl #:alexandria #:xyz.shunter.wayflan.client)
   (:export #:wl-include)
-  (:documentation "PRIVATE: Wayland XML protocol definitions auto-wrapper.
-
-This package defines WL-INCLUDE, a macro that transforms a Wayland protocol described in an XML file into wayflan definition forms.
-
-PRIVATE: This package is private to Wayflan, and its API is susceptible to change. Please do not use this package in your own code."))
+  (:documentation "PRIVATE: This package is private to Wayflan, and its API is susceptible to change. Please do not use this package in your own code."))
 
 (defpackage #:xyz.shunter.wayflan.client.presentation-time
   (:use #:cl #:xyz.shunter.wayflan.client)
   (:nicknames #:wayflan-client.presentation-time)
   (:documentation "Wayland Presentation time protocol implementation.
 
-Wayland is a protocol for a compositor to talk to its clients.
-The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
-The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
+Wayland is a protocol for clients to talk to a display server to make themselves visible or get input from the user.
+The server can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
 
 This package implements the stable Presentation Time protocol."))
 
@@ -81,9 +75,8 @@ This package implements the stable Presentation Time protocol."))
   (:nicknames #:wayflan-client.viewporter)
   (:documentation "Wayland Viewporter protocol implementation.
 
-Wayland is a protocol for a compositor to talk to its clients.
-The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
-The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
+Wayland is a protocol for clients to talk to a display server to make themselves visible or get input from the user.
+The server can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
 
 This package implements the stable Viewporter protocol."))
 
@@ -92,8 +85,7 @@ This package implements the stable Viewporter protocol."))
   (:nicknames #:wayflan-client.xdg-shell)
   (:documentation "Wayland XDG shell protocol implementation.
 
-Wayland is a protocol for a compositor to talk to its clients.
-The compositor can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
-The clients can be traditional applications, X servers (rootless or fullscreen), or other display servers.
+Wayland is a protocol for clients to talk to a display server to make themselves visible or get input from the user.
+The server can be a standalone display server running on Linux kernel modesetting and evdev input devices, or an X application, or a Wayland client itself.
 
 This package implements the stable XDG shell protocol."))

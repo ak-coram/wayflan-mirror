@@ -93,7 +93,7 @@
 
 (defclass wl-destroyed-proxy (wl-proxy)
   ()
-  (:documentation "A proxy that has since been deleted by the compositor."))
+  (:documentation "A proxy that has since been deleted by the server."))
 
 (defclass wl-display (wl-proxy)
   ((%pathname :type pathname
@@ -104,7 +104,7 @@
                  :reader %proxy-table)
    (%socket :type data-socket
             :initarg :socket :reader %wl-display-socket))
-  (:documentation "A connection to the compositor that acts as a proxy to the wl_display singleton object")
+  (:documentation "A connection to the server that acts as a proxy to the wl_display singleton object")
   (:version . 1)
   (:interface-name . "wl_display")
   (:metaclass wl-interface-class))

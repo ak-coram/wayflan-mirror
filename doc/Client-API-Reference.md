@@ -2,7 +2,7 @@
 
 The wayflan-client package includes all symbols from the [wayflan
 package](./API-Reference.md) plus the interface for connecting to, sending
-messages to, and dispatching events from a compositor.
+messages to, and dispatching events from a server.
 
 The macro forms **define-interface**, **define-enum**, **define-request**, and
 **define-event** are all used internally by `:wayflan-client-impl`, and are
@@ -36,7 +36,7 @@ no value, return **nil**.
 
 **Description:**
 
-A representation of a resource in the Wayland compositor. All subclasses are an
+A representation of a resource in the Wayland server. All subclasses are an
 instance of __wl-interface-class__ except __wl-destroyed-proxy__.
 
 **Readers:**
@@ -89,7 +89,7 @@ internal Wayland protocol features.
 
 **Description:**
 
-Find and return a proxy known by the Wayland compositor by that name.
+Find and return a proxy known by the Wayland server by that name.
 
 ## [Generic Function] **destroy-proxy** *proxy*
 
@@ -100,7 +100,7 @@ Find and return a proxy known by the Wayland compositor by that name.
 **Description:**
 
 Mark the proxy for destruction and reclaim its ID for use by another proxy.
-Destructor requests specialize on **destroy-proxy** to send the compositor the
+Destructor requests specialize on **destroy-proxy** to send the server the
 request message.
 
 ## [Generic Function] **wl-enum-value** *enum keyword* => *integer*
@@ -130,7 +130,7 @@ keywords), according to *enum*.
 
 ## [Function] **wl-display-connect** *&optional name* => *display*
 
-Connect to a Wayland compositor and return a __wl-display__ owning the
+Connect to a Wayland server and return a __wl-display__ owning the
 connection.
 
 ## [Function] **wl-display-disconnect** *display*
