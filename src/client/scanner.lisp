@@ -23,9 +23,6 @@
              object
              (wl-name object)))))
 
-(defun %hyphenize (&rest objects)
-  (format nil "~{~A~^-~}" (mapcar '%lispify objects)))
-
 (defun %dot (&rest objects)
   (format nil "~{~A~^.~}" (mapcar '%lispify objects)))
 
